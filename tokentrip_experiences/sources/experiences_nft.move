@@ -283,6 +283,22 @@ module tokentrip_experience::experience_nft {
         });
     }
 
+    // Añade esta función dentro del módulo experience_nft
+    public fun royalties(nft: &ExperienceNFT): &RoyaltyConfig {
+        &nft.royalties
+    }
+
+    
+    // --- AÑADE ESTA FUNCIÓN SI NO EXISTE ---
+    public fun royalty_recipient(config: &RoyaltyConfig): address {
+        config.recipient
+    }
+
+    /// Devuelve los puntos base de las regalías de una configuración.
+    public fun royalty_basis_points(config: &RoyaltyConfig): u16 {
+        config.basis_points
+    }
+
     // --- FUNCIONES DE MARKETPLACE ---
 
     public entry fun list_for_sale(

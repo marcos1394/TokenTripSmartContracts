@@ -13,3 +13,5 @@ tokentrip_experiences = { local = "../tokentrip_experiences" }
 tokentrip_auctions = "0x0"
 # Se añade la dirección del paquete del que depende para la compilación local
 tokentrip_experiences = "0x0"
+tokentrip_dao = "0x0"
+tokentrip_token = "0x0"

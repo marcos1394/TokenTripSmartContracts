@@ -11,4 +11,4 @@ tokentrip_token = { local = "../tokentrip_token" }
 # --- AÑADIDO: Se le da un valor a la dirección del paquete ---
 [addresses]
 tokentrip_staking = "0x0"
-tokentrip_token = "0xab3283e7059a2da72ed1afb4ac41d93dbc71bd94451754fb4ac8570cd4d88535"
+tokentrip_token = "0x0"
