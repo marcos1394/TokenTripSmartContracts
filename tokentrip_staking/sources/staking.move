@@ -6,6 +6,8 @@ module tokentrip_staking::staking {
     use sui::transfer;
     use sui::clock::{Self, Clock};
     use sui::math;
+    use sui::sui::SUI; 
+
 
     use tokentrip_token::tkt::TKT;
 
@@ -13,6 +15,10 @@ module tokentrip_staking::staking {
     const E_NOTHING_TO_CLAIM: u64 = 1;
     const E_RECEIPT_NOT_OWNED: u64 = 2;
     const E_POOL_IS_EMPTY: u64 = 3;
+    const REWARD_PRECISION: u128 = 1_000_000_000_000; // 10^12 para alta precisión
+
+    public struct STAKING has drop {} // <-- AÑADE ESTA LÍNEA
+
 
     // --- MODIFICADO: `StakingPool` con lógica de acumulación ---
     public struct StakingPool has key, store {
@@ -37,14 +43,15 @@ module tokentrip_staking::staking {
     }
 
     // --- FUNCIONES ---
-    fun init(ctx: &mut TxContext) {
+   // --- FUNCIONES ---
+    fun init(witness: STAKING, ctx: &mut TxContext) { // <-- Se cambia el primer parámetro
         let pool = StakingPool {
             id: object::new(ctx),
             total_staked: balance::zero(),
             rewards: balance::zero(),
-            // --- NUEVO ---
-            rewards_per_second: 3805175, // Ejemplo: ~10 SUI por día
-            last_update_timestamp_ms: clock::timestamp_ms(ctx),
+            rewards_per_second: 3805175, 
+            // Se usa el timestamp del epoch, disponible en el contexto de init
+            last_update_timestamp_ms: tx_context::epoch_timestamp_ms(ctx), 
             accumulated_rewards_per_share: 0,
         };
         transfer::share_object(pool);
@@ -69,7 +76,7 @@ module tokentrip_staking::staking {
             id: object::new(ctx),
             staked_amount: amount,
             owner: tx_context::sender(ctx),
-            reward_debt: (amount * pool.accumulated_rewards_per_share) / 1_000_000_000,
+            reward_debt: ((amount as u128) * pool.accumulated_rewards_per_share) / REWARD_PRECISION,
         };
         transfer::public_transfer(receipt, tx_context::sender(ctx));
     }
@@ -122,7 +129,7 @@ module tokentrip_staking::staking {
         transfer::public_transfer(reward_payment, tx_context::sender(ctx));
         
         // 4. Se actualiza la "deuda" de recompensas del usuario para resetear el contador.
-        receipt.reward_debt = (receipt.staked_amount * pool.accumulated_rewards_per_share) / 1_000_000_000;
+        receipt.reward_debt = (receipt.staked_amount as u128 * pool.accumulated_rewards_per_share) / 1_000_000_000;
     }
 
     // --- Funciones Internas y de Vista ---
@@ -140,14 +147,14 @@ module tokentrip_staking::staking {
             return
         };
 
-        let rewards_generated = (time_elapsed * pool.rewards_per_second) / 1000;
-        pool.accumulated_rewards_per_share = pool.accumulated_rewards_per_share + ((rewards_generated * 1_000_000_000) / total_staked);
+        let rewards_generated = ((time_elapsed as u128) * (pool.rewards_per_second as u128)) / 1000;
+        pool.accumulated_rewards_per_share = pool.accumulated_rewards_per_share + ((rewards_generated * REWARD_PRECISION) / (total_staked as u128));
         pool.last_update_timestamp_ms = now;
     }
 
     /// (Pública de solo lectura) Calcula las recompensas pendientes para un recibo.
     public fun pending_rewards(pool: &StakingPool, receipt: &StakeReceipt): u64 {
-        let expected_reward = (receipt.staked_amount * pool.accumulated_rewards_per_share) / 1_000_000_000;
+        let expected_reward = ((receipt.staked_amount as u128) * pool.accumulated_rewards_per_share) / REWARD_PRECISION;
         (expected_reward - receipt.reward_debt) as u64
     }
 

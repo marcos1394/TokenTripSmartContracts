@@ -1,6 +1,12 @@
 [package]
 name = "tokentrip_token"
 version = "0.0.1"
+# --- AÑADIDO: Se especifica la edición moderna de Move ---
+edition = "2024.alpha"
 
 [dependencies]
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "testnet" }
+
+# --- AÑADIDO: Se le da un valor a la dirección del paquete ---
+[addresses]
+tokentrip_token = "0x0"
