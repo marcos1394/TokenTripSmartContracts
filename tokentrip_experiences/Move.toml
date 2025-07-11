@@ -1,9 +1,13 @@
 [package]
 name = "tokentrip_experiences"
 version = "0.0.1"
+edition = "2024.alpha"
 
 [dependencies]
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "testnet" }
 tokentrip_token = { local = "../tokentrip_token" }
 tokentrip_dao = { local = "../tokentrip_dao" }
 tokentrip_staking = { local = "../tokentrip_staking" }
+
+[addresses]
+tokentrip_experience = "0x0"

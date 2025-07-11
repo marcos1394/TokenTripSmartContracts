@@ -6,7 +6,7 @@ module tokentrip_experience::experience_nft {
     use sui::event;
     use std::string::{String as StdString, utf8};
     use sui::url::{Url as SuiUrl, new_unsafe_from_bytes};
-    use sui::coin::{Self, Coin, burn};
+    use sui::coin::{Self, Coin, burn, TreasuryCap};
     use sui::sui::SUI;
     use sui::balance::{Self, Balance};
     use sui::table::{Self, Table};
@@ -28,11 +28,9 @@ module tokentrip_experience::experience_nft {
     // --- CONSTANTES ---
     const PLATFORM_FEE_BASIS_POINTS: u64 = 500; // 5.00%
     const VIP_FEE_BASIS_POINTS: u64 = 250; // 2.50% para VIPs
-    const ROYALTY_FEE_BASIS_POINTS: u64 = 250; // 2.50% de regalía por defecto
+    const ROYALTY_FEE_BASIS_POINTS: u16 = 250; // 2.50% - CORREGIDO a u16
 
     // --- STRUCTS ---
-    public struct AdminCap has key, store { id: UID }
-    public struct VipRegistry has key, store { id: UID, vips: Table<address, bool> }
     // --- STRUCTS ---
 
     public struct AdminCap has key, store { 
@@ -296,6 +294,9 @@ module tokentrip_experience::experience_nft {
         assert!(tx_context::sender(ctx) == provider_profile.owner, E_UNAUTHORIZED);
         assert!(provider_profile.owner == nft.provider_address, E_UNAUTHORIZED);
 
+        let provider_id = nft.provider_id;
+
+
         let listing = Listing {
             id: object::new(ctx), 
             nft, 
@@ -324,6 +325,9 @@ module tokentrip_experience::experience_nft {
     ) {
         let sender = tx_context::sender(ctx);
         assert!(sender != nft.provider_address, E_UNAUTHORIZED);
+
+        let provider_id = nft.provider_id;
+
         
         let listing = Listing {
             id: object::new(ctx), 
@@ -331,7 +335,7 @@ module tokentrip_experience::experience_nft {
             price: price_in_mist, 
             is_available: true,
             seller: sender, 
-            provider_id: nft.provider_id,
+            provider_id: provider_id,
             is_tkt_listing: false
         };
 
@@ -351,6 +355,8 @@ module tokentrip_experience::experience_nft {
         ctx: &mut TxContext
     ) {
         assert!(tx_context::sender(ctx) == provider_profile.owner, E_UNAUTHORIZED);
+        let provider_id = nft.provider_id;
+
         let listing = Listing {
             id: object::new(ctx), 
             nft, 
@@ -373,53 +379,76 @@ module tokentrip_experience::experience_nft {
     }
    
     // --- MODIFICADO: `purchase` ahora distribuye comisiones ---
-    public entry fun purchase(
+   public entry fun purchase(
         listing: Listing,
         vip_registry: &VipRegistry,
-        dao_treasury: &mut DAOTreasury,
-        staking_pool: &mut StakingPool,
-        payment: Coin<SUI>,
+        staking_pool: &mut StakingPool, // Se usará para depositar las recompensas
+        payment: Coin<SUI>, // Se recibe el objeto Coin completo
         ctx: &mut TxContext
     ) {
         assert!(!listing.is_tkt_listing, E_WRONG_CURRENCY);
-        // Lógica de pago y transferencia del NFT
-        let (fee, remainder) = take_fee(listing.price, listing.seller, vip_registry, payment);
-        transfer::public_transfer(remainder, listing.seller);
-        transfer_nft_and_create_receipt(listing, tx_context::sender(ctx), ctx);
+        assert!(listing.is_available, E_LISTING_NOT_AVAILABLE);
+        let price = listing.price;
+        assert!(coin::value(&payment) >= price, E_INSUFFICIENT_FUNDS);
 
-        // --- LÓGICA ECONÓMICA (V1 para SUI) ---
-        // En esta versión, toda la comisión en SUI se envía al pool de staking
-        // para ser usada como recompensa. Una V2 podría convertirla a TKT.
-        deposit_rewards(staking_pool, fee);
-    }
-
-    // --- MODIFICADO: `purchase_with_tkt` ahora distribuye comisiones ---
-    public entry fun purchase_with_tkt(
-        listing: Listing,
-        dao_treasury: &mut DAOTreasury,
-        staking_pool: &mut StakingPool,
-        payment: Coin<TKT>,
-        ctx: &mut TxContext
-    ) {
-        assert!(listing.is_tkt_listing, E_WRONG_CURRENCY);
-        // Lógica de pago y transferencia del NFT
-        let (fee, remainder) = take_fee_tkt(listing.price, payment);
-        transfer::public_transfer(remainder, listing.seller);
-        transfer_nft_and_create_receipt(listing, tx_context::sender(ctx), ctx);
-
-        // --- LÓGICA ECONÓMICA (Completa para TKT) ---
-        let fee_value = coin::value(&fee);
-        // 40% a Recompensas de Staking (en SUI, se necesitaría un swap)
-        // Por ahora, para simplificar, la tesorería de DAO recibe esta parte.
-        let dao_rewards_part = coin::split(&mut fee, fee_value * 40 / 100, ctx);
-        // 30% a la Tesorería de la DAO
-        let dao_treasury_part = coin::split(&mut fee, fee_value * 30 / 100, ctx);
-        // 30% restante en `fee` para ser quemado
+        let seller = listing.seller;
         
-        deposit_to_treasury(dao_treasury, dao_rewards_part);
-        deposit_to_treasury(dao_treasury, dao_treasury_part);
-        burn(fee); // Se quema el 30%
+        // Se convierte la moneda de pago a un balance para poder dividirla
+        let mut payment_balance = coin::into_balance(payment);
+
+        // Se calcula la comisión
+        let fee_rate = if (table::contains(&vip_registry.vips, seller)) { VIP_FEE_BASIS_POINTS } else { PLATFORM_FEE_BASIS_POINTS };
+        let fee_amount = (price * fee_rate) / 10000;
+        
+        // Se separa la comisión del balance total
+        let mut fee_balance = balance::split(&mut payment_balance, fee_amount);
+        
+        // El resto del balance (el pago principal) se convierte a Coin y va al vendedor
+        transfer::public_transfer(coin::from_balance(payment_balance, ctx), seller);
+
+        // --- CORRECCIÓN: La comisión en SUI se deposita en el pool de staking ---
+        let fee_coin = coin::from_balance(fee_balance, ctx);
+        deposit_rewards(staking_pool, fee_coin);
+        
+        // La transferencia del NFT y la creación del recibo se mantienen igual.
+        transfer_nft_and_create_receipt(listing, tx_context::sender(ctx), ctx);
     }
+
+    // --- MODIFICADO: `purchase_with_tkt` ahora implementa la distribución completa ---
+   public entry fun purchase_with_tkt(
+    listing: Listing,
+    dao_treasury: &mut DAOTreasury,
+    // staking_pool: &mut StakingPool, // Se omite por ahora para simplificar
+    tkt_treasury_cap: &mut TreasuryCap<TKT>, // Se recibe el cap para poder quemar
+    payment: Coin<TKT>, // Ya no necesita ser &mut
+    ctx: &mut TxContext
+) {
+    assert!(listing.is_tkt_listing, E_WRONG_CURRENCY);
+    assert!(listing.is_available, E_LISTING_NOT_AVAILABLE);
+    let price = listing.price;
+    assert!(coin::value(&payment) >= price, E_INSUFFICIENT_FUNDS);
+
+    let mut payment_balance = coin::into_balance(payment);
+    let fee_amount = (price * PLATFORM_FEE_BASIS_POINTS) / 10000;
+    let mut fee_balance = balance::split(&mut payment_balance, fee_amount);
+
+    // El 95% va al vendedor
+    transfer::public_transfer(coin::from_balance(payment_balance, ctx), listing.seller);
+
+    // Se distribuye la comisión (el 5% restante)
+    let fee_value = balance::value(&fee_balance);
+    let rewards_part = balance::split(&mut fee_balance, fee_value * 40 / 100);
+    let dao_part = balance::split(&mut fee_balance, fee_value * 30 / 100);
+
+    // rewards_part iría al staking_pool, por ahora lo depositamos en la tesorería de la DAO
+    deposit_to_treasury(dao_treasury, coin::from_balance(rewards_part, ctx));
+    deposit_to_treasury(dao_treasury, coin::from_balance(dao_part, ctx));
+
+    // El resto de fee_balance (30%) se quema
+    coin::burn(tkt_treasury_cap, coin::from_balance(fee_balance, ctx));
+
+    transfer_nft_and_create_receipt(listing, tx_context::sender(ctx), ctx);
+}
     
     // --- FUNCIONES DE RESEÑAS Y FRACCIONAMIENTO ---
 
@@ -530,21 +559,9 @@ module tokentrip_experience::experience_nft {
     }
 
     // --- FUNCIONES INTERNAS (Helpers) ---
-    fun take_fee(price: u64, seller: address, vip_registry: &VipRegistry, payment: &mut Coin<SUI>): (Coin<SUI>, Coin<SUI>) {
-        let mut commission_rate = PLATFORM_FEE_BASIS_POINTS;
-        if (table::contains(&vip_registry.vips, seller)) {
-            commission_rate = VIP_FEE_BASIS_POINTS;
-        };
-        let fee_amount = (price * commission_rate) / 10000;
-        let fee_coin = coin::split(payment, fee_amount, tx_context::ctx_for_testing());
-        (fee_coin, coin_from_balance(balance::destroy_some(coin::balance_mut(payment)), tx_context::ctx_for_testing()))
-    }
     
-    fun take_fee_tkt(price: u64, payment: &mut Coin<TKT>): (Coin<TKT>, Coin<TKT>) {
-        let fee_amount = (price * PLATFORM_FEE_BASIS_POINTS) / 10000;
-        let fee_coin = coin::split(payment, fee_amount, tx_context::ctx_for_testing());
-        (fee_coin, coin_from_balance(balance::destroy_some(coin::balance_mut(payment)), tx_context::ctx_for_testing()))
-    }
+    
+    
 
     fun transfer_nft_and_create_receipt(listing: Listing, buyer: address, ctx: &mut TxContext) {
         let listing_id = object::id(&listing);
