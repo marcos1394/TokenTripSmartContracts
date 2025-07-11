@@ -9,3 +9,4 @@ tokentrip_token = { local = "../tokentrip_token" }
 
 [addresses]
 tokentrip_dao = "0x0"
+tokentrip_token = "0x791c12189bdba5c345180c4650c12670499333e7c1c38457477e3b18b8aa5d07"
