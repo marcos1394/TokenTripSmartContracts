@@ -1,0 +1,15 @@
+[package]
+name = "tokentrip_auctions"
+version = "0.0.1"
+edition = "2024.alpha"
+
+[dependencies]
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "testnet" }
+
+# Se añade la dependencia al paquete de experiences para poder usar el struct ExperienceNFT
+tokentrip_experiences = { local = "../tokentrip_experiences" }
+
+[addresses]
+tokentrip_auctions = "0x0"
+# Se añade la dirección del paquete del que depende para la compilación local
+tokentrip_experiences = "0x0"
