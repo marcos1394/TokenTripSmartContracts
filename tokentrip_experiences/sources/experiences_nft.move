@@ -220,8 +220,8 @@ module tokentrip_experience::experience_nft {
         transfer::public_transfer(profile, sender);
     }
 
-    public fun mint_experience(
-        _admin_cap: &AdminCap,
+    /// Permite a un proveedor registrado crear (mintear) un nuevo NFT de experiencia.
+    public entry fun provider_mint_experience(
         provider_profile: &ProviderProfile,
         name_bytes: vector<u8>, 
         description_bytes: vector<u8>,
@@ -235,12 +235,16 @@ module tokentrip_experience::experience_nft {
         collection_name_bytes: vector<u8>,
         attributes: vector<Attribute>, 
         ctx: &mut TxContext
-    ) : ExperienceNFT {
+    ) {
+        // 1. Verificación de Autorización: Solo el dueño del perfil puede mintear.
+        assert!(tx_context::sender(ctx) == provider_profile.owner, E_UNAUTHORIZED);
+
+        // 2. Lógica de creación del NFT (idéntica a la anterior)
         let nft = ExperienceNFT {
             id: object::new(ctx),
             name: utf8(name_bytes),
             description: utf8(description_bytes),
-            image_url: new_unsafe_from_bytes(image_url_bytes),
+            image_url: url::new_unsafe_from_bytes(image_url_bytes),
             event_name: utf8(event_name_bytes),
             event_city: utf8(event_city_bytes),
             validity_details: utf8(validity_details_bytes),
@@ -258,15 +262,21 @@ module tokentrip_experience::experience_nft {
             provider_address: provider_profile.owner
         };
 
-        event::emit(NftMinted {
-            object_id: object::id(&nft),
-            provider_id: object::id(provider_profile),
-            name: nft.name,
-            minter: tx_context::sender(ctx)
-        });
+        let nft_id = object::id(&nft);
+        let nft_name = nft.name;
         
-        nft
+        // 3. Emite el evento
+        event::emit(NftMinted {
+            object_id: nft_id,
+            provider_id: object::id(provider_profile),
+            name: nft_name,
+            minter: provider_profile.owner // Ahora el minter es el propio proveedor
+        });
+
+        // 4. Se transfiere el nuevo NFT directamente al proveedor.
+        transfer::public_transfer(nft, provider_profile.owner);
     }
+
 
     public entry fun update_nft_description(
         profile: &ProviderProfile,
