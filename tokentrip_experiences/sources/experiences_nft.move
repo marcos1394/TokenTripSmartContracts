@@ -49,6 +49,8 @@ module tokentrip_experience::experience_nft {
         bio: StdString,
         image_url: SuiUrl,
         active_listings: vector<ID>,
+        category: StdString, // Guardará la categoría, ej: "Events", "Hospitality", "Digital"
+        metadata: vector<Attribute>, // Para datos extra, como en los NFTs
         total_reviews: u64,
         total_rating_points: u64,
     }
@@ -198,7 +200,8 @@ module tokentrip_experience::experience_nft {
     public entry fun register_provider(
         name_bytes: vector<u8>, 
         bio_bytes: vector<u8>, 
-        image_url_bytes: vector<u8>, 
+        image_url_bytes: vector<u8>,
+        category_bytes: vector<u8>, // <-- AÑADIDO
         ctx: &mut TxContext
     ) {
         let sender = tx_context::sender(ctx);
@@ -208,6 +211,8 @@ module tokentrip_experience::experience_nft {
             name: utf8(name_bytes), 
             bio: utf8(bio_bytes),
             image_url: new_unsafe_from_bytes(image_url_bytes), 
+            category: utf8(category_bytes),
+            metadata: vector::empty(), // Se inicializa vacío por ahora
             active_listings: vector::empty(),
             total_reviews: 0,
             total_rating_points: 0,
