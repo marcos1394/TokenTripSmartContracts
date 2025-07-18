@@ -99,7 +99,9 @@ module tokentrip_experience::experience_nft {
         collection_name: StdString, 
         royalties: RoyaltyConfig,
         provider_id: ID,
-        provider_address: address
+        provider_address: address,
+        is_redeemable: bool,          // true si es un ticket/voucher, false si es un coleccionable
+        expiration_timestamp_ms: u64, // Timestamp de expiración. 0 si nunca expira.
     }
 
     public struct Listing has key, store {
