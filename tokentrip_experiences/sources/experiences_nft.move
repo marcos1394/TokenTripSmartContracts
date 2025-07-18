@@ -351,10 +351,16 @@ module tokentrip_experience::experience_nft {
         profile: &ProviderProfile,
         nft: &mut ExperienceNFT,
         new_description: vector<u8>,
+        clock: &Clock, // <-- AÑADIDO
         ctx: &mut TxContext
     ) {
         assert!(object::id(profile) == nft.provider_id, E_UNAUTHORIZED);
         assert!(tx_context::sender(ctx) == profile.owner, E_UNAUTHORIZED);
+         // --- AÑADIDO: Verificación de Expiración ---
+        assert!(
+            nft.expiration_timestamp_ms == 0 || clock::timestamp_ms(clock) < nft.expiration_timestamp_ms,
+            E_UNAUTHORIZED // O un error E_EVENT_HAS_PASSED
+        );
         nft.description = utf8(new_description);
         event::emit(NftUpdated {
             nft_id: object::id(nft),
