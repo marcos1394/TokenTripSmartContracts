@@ -112,6 +112,16 @@ module tokentrip_experience::experience_nft {
         is_tkt_listing: bool
     }
 
+// --- AÑADE ESTE NUEVO STRUCT ---
+    /// Un trofeo digital intransferible que prueba la asistencia a una experiencia.
+    public struct ProofOfExperience has key {
+        id: UID,
+        original_nft_name: StdString,
+        image_url: SuiUrl,
+        provider_name: StdString, // Para saber quién organizó la experiencia
+        attended_on_date: u64, // Timestamp de cuándo se redimió
+    }
+
     public struct Fraction has key, store {
         id: UID,
         parent_id: ID,
@@ -120,14 +130,19 @@ module tokentrip_experience::experience_nft {
         parent_image_url: SuiUrl,
     }
 
-   
-
     // --- EVENTOS ---
 
     public struct ProviderRegistered has copy, drop {
         provider_id: ID, 
         owner: address, 
         name: StdString 
+    }
+
+// --- AÑADE ESTE NUEVO EVENTO ---
+    public struct ExperienceRedeemed has copy, drop {
+        poe_id: ID,
+        original_nft_id: ID,
+        owner: address
     }
 
     public struct NftMinted has copy, drop {
@@ -280,6 +295,46 @@ module tokentrip_experience::experience_nft {
 
         // 4. Se transfiere el nuevo NFT directamente al proveedor.
         transfer::public_transfer(nft, provider_profile.owner);
+    }
+
+/// Permite a un usuario redimir un ExperienceNFT para recibir un ProofOfExperience (SBT).
+    /// Esta acción consume (quema) el ExperienceNFT original.
+    public entry fun redeem_experience(
+        nft: ExperienceNFT, 
+        provider_profile: &ProviderProfile, // Se necesita para obtener el nombre del proveedor
+        clock: &Clock, 
+        ctx: &mut TxContext
+    ) {
+        let sender = tx_context::sender(ctx);
+        let original_nft_id = object::id(&nft);
+
+        // Verificación: Asegurarse de que el perfil de proveedor coincide con el del NFT.
+        assert!(object::id(provider_profile) == nft.provider_id, E_UNAUTHORIZED);
+
+        // 1. Crear el nuevo "Recuerdo" (Proof of Experience NFT)
+        let poe = ProofOfExperience {
+            id: object::new(ctx),
+            original_nft_name: nft.name,
+            image_url: nft.image_url,
+            provider_name: provider_profile.name,
+            attended_on_date: clock::timestamp_ms(clock),
+        };
+
+        let poe_id = object::id(&poe);
+
+        // 2. Transferir el nuevo recuerdo intransferible al usuario
+        transfer::public_transfer(poe, sender);
+        
+        // 3. Emitir el evento
+        event::emit(ExperienceRedeemed {
+            poe_id,
+            original_nft_id,
+            owner: sender
+        });
+        
+        // 4. Desestructurar y quemar el ExperienceNFT original
+        let ExperienceNFT { id, .. } = nft;
+        object::delete(id);
     }
 
 
