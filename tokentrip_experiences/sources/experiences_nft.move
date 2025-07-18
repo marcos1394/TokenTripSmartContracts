@@ -380,39 +380,6 @@ module tokentrip_experience::experience_nft {
 
     // --- FUNCIONES DE MARKETPLACE ---
 
-    public entry fun list_for_sale(
-        provider_profile: &mut ProviderProfile, 
-        nft: ExperienceNFT, 
-        price_in_mist: u64, 
-        ctx: &mut TxContext
-    ) {
-        assert!(tx_context::sender(ctx) == provider_profile.owner, E_UNAUTHORIZED);
-        assert!(provider_profile.owner == nft.provider_address, E_UNAUTHORIZED);
-
-        let provider_id = nft.provider_id;
-
-
-        let listing = Listing {
-            id: object::new(ctx), 
-            nft, 
-            price: price_in_mist, 
-            is_available: true,
-            seller: provider_profile.owner, 
-            provider_id: object::id(provider_profile),
-            is_tkt_listing: false
-        };
-
-        let listing_id = object::id(&listing);
-        vector::push_back(&mut provider_profile.active_listings, listing_id);
-        event::emit(NftListed {
-            listing_id,
-            nft_id: object::id(&listing.nft),
-            price: price_in_mist,
-            is_tkt_listing: false
-        });
-        transfer::share_object(listing);
-    }
-
     public entry fun list_for_resale(
         nft: ExperienceNFT, 
         price_in_mist: u64, 
@@ -610,9 +577,16 @@ module tokentrip_experience::experience_nft {
     public entry fun fractionize(
         nft: ExperienceNFT, 
         shares: vector<u64>, 
-        recipients: vector<address>, 
+        recipients: vector<address>,
+        clock: &Clock, // <-- AÑADIDO
         ctx: &mut TxContext
     ) {
+
+         // --- AÑADIDO: Verificación de Expiración ---
+        assert!(
+            nft.expiration_timestamp_ms == 0 || clock::timestamp_ms(clock) < nft.expiration_timestamp_ms,
+            E_UNAUTHORIZED // Puedes usar un código de error E_TICKET_EXPIRED
+        );
         let owner = tx_context::sender(ctx);
         let parent_id = object::id(&nft);
         let parent_name = nft.name;
