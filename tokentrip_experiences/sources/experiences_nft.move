@@ -314,10 +314,14 @@ module tokentrip_experience::experience_nft {
         let sender = tx_context::sender(ctx);
         let original_nft_id = object::id(&nft);
 
-        // Verificación: Asegurarse de que el perfil de proveedor coincide con el del NFT.
+        // Verificación 1: El NFT debe ser redimible.
+        assert!(nft.is_redeemable, E_UNAUTHORIZED); 
+        // Verificación 2: El NFT no debe haber expirado.
+        assert!(nft.expiration_timestamp_ms == 0 || clock::timestamp_ms(clock) < nft.expiration_timestamp_ms, E_UNAUTHORIZED);
+        // Verificación 3: El perfil de proveedor debe ser el correcto para este NFT.
         assert!(object::id(provider_profile) == nft.provider_id, E_UNAUTHORIZED);
 
-        // 1. Crear el nuevo "Recuerdo" (Proof of Experience NFT)
+        // Se crea el nuevo "Recuerdo" (Proof of Experience NFT)
         let poe = ProofOfExperience {
             id: object::new(ctx),
             original_nft_name: nft.name,
@@ -328,17 +332,16 @@ module tokentrip_experience::experience_nft {
 
         let poe_id = object::id(&poe);
 
-        // 2. Transferir el nuevo recuerdo intransferible al usuario
+        // Se transfiere el nuevo recuerdo intransferible al usuario
         transfer::public_transfer(poe, sender);
         
-        // 3. Emitir el evento
         event::emit(ExperienceRedeemed {
             poe_id,
             original_nft_id,
             owner: sender
         });
         
-        // 4. Desestructurar y quemar el ExperienceNFT original
+        // Se desestructura y quema el ExperienceNFT original
         let ExperienceNFT { id, .. } = nft;
         object::delete(id);
     }
