@@ -255,7 +255,9 @@ module tokentrip_experience::experience_nft {
         tier_bytes: vector<u8>, 
         serial_number: u64, 
         collection_name_bytes: vector<u8>,
-        attributes: vector<Attribute>, 
+        attributes: vector<Attribute>,
+        is_redeemable: bool,
+        expiration_timestamp_ms: u64,
         ctx: &mut TxContext
     ) {
         // 1. Verificación de Autorización: Solo el dueño del perfil puede mintear.
@@ -281,7 +283,9 @@ module tokentrip_experience::experience_nft {
                 basis_points: ROYALTY_FEE_BASIS_POINTS
             },
             provider_id: object::id(provider_profile),
-            provider_address: provider_profile.owner
+            provider_address: provider_profile.owner,
+            is_redeemable: is_redeemable,
+            expiration_timestamp_ms: expiration_timestamp_ms,
         };
 
         let nft_id = object::id(&nft);
