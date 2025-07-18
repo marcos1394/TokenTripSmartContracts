@@ -416,8 +416,16 @@ module tokentrip_experience::experience_nft {
     public entry fun list_for_resale(
         nft: ExperienceNFT, 
         price_in_mist: u64, 
+        clock: &Clock, // <-- AÑADIDO
         ctx: &mut TxContext
     ) {
+
+        // --- AÑADIDO: Verificación de Expiración ---
+        // La reventa solo se permite si la expiración es 0 (nunca expira) o si la fecha actual es anterior a la fecha de expiración.
+        assert!(
+            nft.expiration_timestamp_ms == 0 || clock::timestamp_ms(clock) < nft.expiration_timestamp_ms,
+            E_UNAUTHORIZED // Podemos crear un E_TICKET_EXPIRED si queremos
+        );
         let sender = tx_context::sender(ctx);
         assert!(sender != nft.provider_address, E_UNAUTHORIZED);
 
@@ -446,9 +454,16 @@ module tokentrip_experience::experience_nft {
     public entry fun list_for_sale_with_tkt(
         provider_profile: &mut ProviderProfile, 
         nft: ExperienceNFT, 
-        price_in_tkt_mist: u64, 
+        price_in_tkt_mist: u64,
+        clock: &Clock, // <-- AÑADIDO
         ctx: &mut TxContext
     ) {
+
+        // --- AÑADIDO: Verificación de Expiración ---
+        assert!(
+            nft.expiration_timestamp_ms == 0 || clock::timestamp_ms(clock) < nft.expiration_timestamp_ms,
+            E_UNAUTHORIZED
+        );
         assert!(tx_context::sender(ctx) == provider_profile.owner, E_UNAUTHORIZED);
         let provider_id = nft.provider_id;
 
