@@ -269,6 +269,64 @@ module tokentrip_experience::experience_nft {
         transfer::public_transfer(profile, sender);
     }
 
+    public entry fun evolve_experience(
+        nft: &mut ExperienceNFT, 
+        provider_profile: &ProviderProfile, // Necesario para comprobar metas relacionadas con el proveedor
+        clock: &Clock, 
+        _ctx: &mut TxContext
+    ) {
+        // Se obtiene una referencia mutable al vector de reglas
+        let rules = &mut nft.evolution_rules;
+        let i = 0;
+        let len = vector::length(rules);
+
+        let current_time = clock::timestamp_ms(clock);
+
+        // Se recorren todas las reglas para ver si alguna se puede activar
+        while (i < len) {
+            let rule = vector::borrow_mut(rules, i);
+
+            // Solo se procesan las reglas que no han sido activadas antes
+            if (!rule.is_triggered) {
+                
+                let should_trigger = false;
+
+                // Caso 1: Disparador por TIEMPO
+                if (rule.trigger_type == 0) { 
+                    if (current_time >= rule.trigger_value) {
+                        should_trigger = true;
+                    }
+                };
+
+                // Caso 2: Disparador por META (ejemplo: N.º de reseñas del proveedor)
+                if (rule.trigger_type == 1) {
+                    if (provider_profile.total_reviews >= rule.trigger_value) {
+                        should_trigger = true;
+                    }
+                };
+
+                // Si alguna de las condiciones se cumplió, se aplica la evolución
+                if (should_trigger) {
+                    // Se actualizan los metadatos del NFT
+                    nft.image_url = rule.new_image_url;
+                    nft.description = rule.new_description;
+                    
+                    // Se añaden los nuevos atributos
+                    vector::append(&mut nft.attributes, &mut rule.attributes_to_add);
+
+                    // Se marca la regla como activada para que no vuelva a usarse
+                    rule.is_triggered = true;
+                }
+            };
+            i = i + 1;
+        };
+
+        // Se emite un evento para notificar al mundo exterior del cambio
+        event::emit(NftEvolved {
+            nft_id: object::id(nft)
+        });
+    }
+
 /// Permite a un admin marcar un perfil de proveedor como verificado.
     public entry fun verify_provider(
         _admin_cap: &AdminCap,
