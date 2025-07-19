@@ -48,9 +48,10 @@ module tokentrip_experience::experience_nft {
         name: StdString,
         bio: StdString,
         image_url: SuiUrl,
-        active_listings: vector<ID>,
-        category: StdString, // Guardará la categoría, ej: "Events", "Hospitality", "Digital"
-        metadata: vector<Attribute>, // Para datos extra, como en los NFTs
+        category: StdString,
+        metadata: vector<Attribute>,
+        is_verified: bool,      // <-- AÑADIDO: Para la verificación por la DAO
+        tier: u8,               // <-- AÑADIDO: Para el sistema de reputación
         total_reviews: u64,
         total_rating_points: u64,
     }
@@ -111,6 +112,8 @@ module tokentrip_experience::experience_nft {
         provider_address: address,
         is_redeemable: bool,          // true si es un ticket/voucher, false si es un coleccionable
         expiration_timestamp_ms: u64, // Timestamp de expiración. 0 si nunca expira.
+        evolution_rules: vector<EvolutionRule>, // <-- AÑADIDO
+
     }
 
     public struct Listing has key, store {
