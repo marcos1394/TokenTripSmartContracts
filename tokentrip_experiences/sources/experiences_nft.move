@@ -269,6 +269,35 @@ module tokentrip_experience::experience_nft {
         transfer::public_transfer(profile, sender);
     }
 
+/// Permite a un admin marcar un perfil de proveedor como verificado.
+    public entry fun verify_provider(
+        _admin_cap: &AdminCap,
+        profile: &mut ProviderProfile
+    ) {
+        profile.is_verified = true;
+
+        event::emit(ProviderUpdated {
+            provider_id: object::id(profile),
+            is_verified: profile.is_verified,
+            new_tier: profile.tier,
+        });
+    }
+
+    /// Permite a un admin cambiar el nivel (tier) de un proveedor.
+    public entry fun set_provider_tier(
+        _admin_cap: &AdminCap,
+        profile: &mut ProviderProfile,
+        new_tier: u8
+    ) {
+        profile.tier = new_tier;
+
+        event::emit(ProviderUpdated {
+            provider_id: object::id(profile),
+            is_verified: profile.is_verified,
+            new_tier: profile.tier,
+        });
+    }
+
     /// Permite a un proveedor registrado crear (mintear) un nuevo NFT de experiencia.
     public entry fun provider_mint_experience(
         provider_profile: &ProviderProfile,
