@@ -243,7 +243,7 @@ module tokentrip_experience::experience_nft {
         name_bytes: vector<u8>, 
         bio_bytes: vector<u8>, 
         image_url_bytes: vector<u8>,
-        category_bytes: vector<u8>, // <-- AÑADIDO
+        category_bytes: vector<u8>,
         ctx: &mut TxContext
     ) {
         let sender = tx_context::sender(ctx);
@@ -252,10 +252,12 @@ module tokentrip_experience::experience_nft {
             owner: sender, 
             name: utf8(name_bytes), 
             bio: utf8(bio_bytes),
-            image_url: new_unsafe_from_bytes(image_url_bytes), 
+            image_url: url::new_unsafe_from_bytes(image_url_bytes),
             category: utf8(category_bytes),
-            metadata: vector::empty(), // Se inicializa vacío por ahora
-            active_listings: vector::empty(),
+            metadata: vector::empty(),
+            // --- Se inicializan los nuevos campos y se elimina active_listings ---
+            is_verified: false, // Los nuevos proveedores no están verificados por defecto
+            tier: 0,            // Todos empiezan en el nivel 0 (ej. Bronce)
             total_reviews: 0,
             total_rating_points: 0,
         };
