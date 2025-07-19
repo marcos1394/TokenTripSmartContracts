@@ -55,6 +55,15 @@ module tokentrip_experience::experience_nft {
         total_rating_points: u64,
     }
 
+    public struct EvolutionRule has store, drop, copy {
+    trigger_type: u8, // 0 para Tiempo, 1 para Meta
+    trigger_value: u64, // El timestamp o el valor de la meta
+    new_image_url: SuiUrl,
+    new_description: StdString,
+    attributes_to_add: vector<Attribute>,
+    is_triggered: bool, // Para asegurar que solo se active una vez
+}
+
     public struct PurchaseReceipt has key, store {
         id: UID,
         buyer: address,
