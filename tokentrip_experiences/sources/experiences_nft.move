@@ -299,6 +299,7 @@ module tokentrip_experience::experience_nft {
     }
 
     /// Permite a un proveedor registrado crear (mintear) un nuevo NFT de experiencia.
+    /// Permite a un proveedor registrado crear (mintear) un nuevo NFT de experiencia.
     public entry fun provider_mint_experience(
         provider_profile: &ProviderProfile,
         name_bytes: vector<u8>, 
@@ -314,12 +315,12 @@ module tokentrip_experience::experience_nft {
         attributes: vector<Attribute>,
         is_redeemable: bool,
         expiration_timestamp_ms: u64,
+        evolution_rules: vector<EvolutionRule>, // <-- AÑADIDO: Se reciben las reglas
         ctx: &mut TxContext
     ) {
-        // 1. Verificación de Autorización: Solo el dueño del perfil puede mintear.
+        // La verificación de autorización se mantiene igual
         assert!(tx_context::sender(ctx) == provider_profile.owner, E_UNAUTHORIZED);
 
-        // 2. Lógica de creación del NFT (idéntica a la anterior)
         let nft = ExperienceNFT {
             id: object::new(ctx),
             name: utf8(name_bytes),
@@ -342,20 +343,19 @@ module tokentrip_experience::experience_nft {
             provider_address: provider_profile.owner,
             is_redeemable: is_redeemable,
             expiration_timestamp_ms: expiration_timestamp_ms,
+            evolution_rules: evolution_rules, // <-- AÑADIDO: Se guardan las reglas
         };
-
+        
         let nft_id = object::id(&nft);
         let nft_name = nft.name;
         
-        // 3. Emite el evento
         event::emit(NftMinted {
             object_id: nft_id,
             provider_id: object::id(provider_profile),
             name: nft_name,
-            minter: provider_profile.owner // Ahora el minter es el propio proveedor
+            minter: provider_profile.owner
         });
 
-        // 4. Se transfiere el nuevo NFT directamente al proveedor.
         transfer::public_transfer(nft, provider_profile.owner);
     }
 
