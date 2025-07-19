@@ -616,40 +616,55 @@ module tokentrip_experience::experience_nft {
     }
 
     // --- MODIFICADO: `purchase_with_tkt` ahora implementa la distribución completa ---
-   public entry fun purchase_with_tkt(
-    listing: Listing,
-    dao_treasury: &mut DAOTreasury,
-    // staking_pool: &mut StakingPool, // Se omite por ahora para simplificar
-    tkt_treasury_cap: &mut TreasuryCap<TKT>, // Se recibe el cap para poder quemar
-    payment: Coin<TKT>, // Ya no necesita ser &mut
-    ctx: &mut TxContext
-) {
-    assert!(listing.is_tkt_listing, E_WRONG_CURRENCY);
-    assert!(listing.is_available, E_LISTING_NOT_AVAILABLE);
-    let price = listing.price;
-    assert!(coin::value(&payment) >= price, E_INSUFFICIENT_FUNDS);
+    /// Permite a un usuario comprar un NFT listado en TKT, aplicando la tokenomics completa.
+    public entry fun purchase_with_tkt(
+        listing: Listing,
+        vip_registry: &VipRegistry, // <-- AÑADIDO: Se recibe el registro de VIPs
+        dao_treasury: &mut DAOTreasury,
+        tkt_treasury_cap: &mut TreasuryCap<TKT>,
+        payment: Coin<TKT>,
+        ctx: &mut TxContext
+    ) {
+        // Verificaciones iniciales
+        assert!(listing.is_tkt_listing, E_WRONG_CURRENCY);
+        assert!(listing.is_available, E_LISTING_NOT_AVAILABLE);
+        let price = listing.price;
+        assert!(coin::value(&payment) >= price, E_INSUFFICIENT_FUNDS);
 
-    let mut payment_balance = coin::into_balance(payment);
-    let fee_amount = (price * PLATFORM_FEE_BASIS_POINTS) / 10000;
-    let mut fee_balance = balance::split(&mut payment_balance, fee_amount);
+        // --- CORRECCIÓN: Se calcula la tasa de comisión dinámicamente ---
+        // Se comprueba si el vendedor es VIP para aplicar un descuento.
+        let fee_rate = if (table::contains(&vip_registry.vips, listing.seller)) {
+            VIP_FEE_BASIS_POINTS // Tasa reducida para VIPs
+        } else {
+            PLATFORM_FEE_BASIS_POINTS // Tasa normal
+        };
+        let fee_amount = (price * fee_rate) / 10000;
 
-    // El 95% va al vendedor
-    transfer::public_transfer(coin::from_balance(payment_balance, ctx), listing.seller);
+        let mut payment_balance = coin::into_balance(payment);
+        
+        // Se separa la comisión del pago total
+        let mut fee_balance = balance::split(&mut payment_balance, fee_amount);
 
-    // Se distribuye la comisión (el 5% restante)
-    let fee_value = balance::value(&fee_balance);
-    let rewards_part = balance::split(&mut fee_balance, fee_value * 40 / 100);
-    let dao_part = balance::split(&mut fee_balance, fee_value * 30 / 100);
+        // El resto del pago va directamente al vendedor
+        transfer::public_transfer(coin::from_balance(payment_balance, ctx), listing.seller);
 
-    // rewards_part iría al staking_pool, por ahora lo depositamos en la tesorería de la DAO
-    deposit_to_treasury(dao_treasury, coin::from_balance(rewards_part, ctx));
-    deposit_to_treasury(dao_treasury, coin::from_balance(dao_part, ctx));
+        // --- Lógica del "Flywheel": Se distribuye la comisión en TKT ---
+        let fee_value = balance::value(&fee_balance);
+        
+        // 40% de la comisión va a la Tesorería de la DAO (destinado a recompensas de staking en el futuro)
+        let rewards_part = balance::split(&mut fee_balance, fee_value * 40 / 100);
+        deposit_to_treasury(dao_treasury, coin::from_balance(rewards_part, ctx));
+        
+        // 30% de la comisión va a la Tesorería de la DAO (para operaciones)
+        let dao_part = balance::split(&mut fee_balance, fee_value * 30 / 100);
+        deposit_to_treasury(dao_treasury, coin::from_balance(dao_part, ctx));
 
-    // El resto de fee_balance (30%) se quema
-    coin::burn(tkt_treasury_cap, coin::from_balance(fee_balance, ctx));
+        // El 30% restante de la comisión se quema, reduciendo la oferta total de TKT
+        coin::burn(tkt_treasury_cap, coin::from_balance(fee_balance, ctx));
 
-    transfer_nft_and_create_receipt(listing, tx_context::sender(ctx), ctx);
-}
+        // Se finaliza la transacción transfiriendo el NFT y creando el recibo
+        transfer_nft_and_create_receipt(listing, tx_context::sender(ctx), ctx);
+    }
     
     // --- FUNCIONES DE RESEÑAS Y FRACCIONAMIENTO ---
 
