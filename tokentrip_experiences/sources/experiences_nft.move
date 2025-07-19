@@ -441,33 +441,99 @@ module tokentrip_experience::experience_nft {
     }
 
     // --- FUNCIONES DE MARKETPLACE ---
+    /// [PROVEEDOR] Pone a la venta un NFT por primera vez en SUI.
+    public entry fun list_for_sale(
+        provider_profile: &ProviderProfile, 
+        nft: ExperienceNFT, 
+        price_in_mist: u64, 
+        clock: &Clock,
+        ctx: &mut TxContext
+    ) {
+        // Verificación de que quien llama es el dueño del perfil de proveedor.
+        assert!(tx_context::sender(ctx) == provider_profile.owner, E_UNAUTHORIZED);
+        // Verificación de que el NFT no ha expirado.
+        assert!(nft.expiration_timestamp_ms == 0 || clock::timestamp_ms(clock) < nft.expiration_timestamp_ms, E_UNAUTHORIZED);
 
+        // Se crea el objeto `Listing`.
+        let listing = Listing {
+            id: object::new(ctx), 
+            nft, 
+            price: price_in_mist, 
+            is_available: true,
+            seller: provider_profile.owner, 
+            provider_id: object::id(provider_profile),
+            is_tkt_listing: false
+        };
+
+        // Se emite un evento para que el frontend pueda indexarlo.
+        event::emit(NftListed {
+            listing_id: object::id(&listing),
+            nft_id: object::id(&listing.nft),
+            price: price_in_mist,
+            is_tkt_listing: false
+        });
+
+        // Se comparte el objeto `Listing` para que sea público en el marketplace.
+        transfer::share_object(listing);
+    }
+    
+    /// [PROVEEDOR] Pone a la venta un NFT por primera vez en TKT.
+    public entry fun list_for_sale_tkt(
+        provider_profile: &ProviderProfile, 
+        nft: ExperienceNFT, 
+        price_in_tkt_mist: u64, 
+        clock: &Clock,
+        ctx: &mut TxContext
+    ) {
+        // Verificación de que quien llama es el dueño del perfil de proveedor.
+        assert!(tx_context::sender(ctx) == provider_profile.owner, E_UNAUTHORIZED);
+        // Verificación de que el NFT no ha expirado.
+        assert!(nft.expiration_timestamp_ms == 0 || clock::timestamp_ms(clock) < nft.expiration_timestamp_ms, E_UNAUTHORIZED);
+
+        // Se crea el objeto `Listing`.
+        let listing = Listing {
+            id: object::new(ctx), 
+            nft, 
+            price: price_in_tkt_mist, 
+            is_available: true,
+            seller: provider_profile.owner, 
+            provider_id: object::id(provider_profile),
+            is_tkt_listing: true
+        };
+
+        // Se emite un evento para que el frontend pueda indexarlo.
+        event::emit(NftListed {
+            listing_id: object::id(&listing),
+            nft_id: object::id(&listing.nft),
+            price: price_in_tkt_mist,
+            is_tkt_listing: true
+        });
+
+        // Se comparte el objeto `Listing` para que sea público en el marketplace.
+        transfer::share_object(listing);
+    }
+
+    /// [USUARIO] Revende un NFT que posee en SUI.
     public entry fun list_for_resale(
         nft: ExperienceNFT, 
         price_in_mist: u64, 
-        clock: &Clock, // <-- AÑADIDO
+        clock: &Clock,
         ctx: &mut TxContext
     ) {
-
-        // --- AÑADIDO: Verificación de Expiración ---
-        // La reventa solo se permite si la expiración es 0 (nunca expira) o si la fecha actual es anterior a la fecha de expiración.
-        assert!(
-            nft.expiration_timestamp_ms == 0 || clock::timestamp_ms(clock) < nft.expiration_timestamp_ms,
-            E_UNAUTHORIZED // Podemos crear un E_TICKET_EXPIRED si queremos
-        );
+        // Verificación de que el NFT no ha expirado.
+        assert!(nft.expiration_timestamp_ms == 0 || clock::timestamp_ms(clock) < nft.expiration_timestamp_ms, E_UNAUTHORIZED);
+        
         let sender = tx_context::sender(ctx);
+        // Verificación clave: El revendedor NO debe ser el proveedor original.
         assert!(sender != nft.provider_address, E_UNAUTHORIZED);
 
-        let provider_id = nft.provider_id;
-
-        
         let listing = Listing {
             id: object::new(ctx), 
             nft, 
             price: price_in_mist, 
             is_available: true,
             seller: sender, 
-            provider_id: provider_id,
+            provider_id: nft.provider_id,
             is_tkt_listing: false
         };
 
@@ -480,43 +546,39 @@ module tokentrip_experience::experience_nft {
         transfer::share_object(listing);
     }
     
-    public entry fun list_for_sale_with_tkt(
-        provider_profile: &mut ProviderProfile, 
+    /// [USUARIO] Revende un NFT que posee en TKT.
+    public entry fun list_for_resale_tkt(
         nft: ExperienceNFT, 
-        price_in_tkt_mist: u64,
-        clock: &Clock, // <-- AÑADIDO
+        price_in_tkt_mist: u64, 
+        clock: &Clock,
         ctx: &mut TxContext
     ) {
+        // Verificación de que el NFT no ha expirado.
+        assert!(nft.expiration_timestamp_ms == 0 || clock::timestamp_ms(clock) < nft.expiration_timestamp_ms, E_UNAUTHORIZED);
 
-        // --- AÑADIDO: Verificación de Expiración ---
-        assert!(
-            nft.expiration_timestamp_ms == 0 || clock::timestamp_ms(clock) < nft.expiration_timestamp_ms,
-            E_UNAUTHORIZED
-        );
-        assert!(tx_context::sender(ctx) == provider_profile.owner, E_UNAUTHORIZED);
-        let provider_id = nft.provider_id;
+        let sender = tx_context::sender(ctx);
+        // Verificación clave: El revendedor NO debe ser el proveedor original.
+        assert!(sender != nft.provider_address, E_UNAUTHORIZED);
 
         let listing = Listing {
             id: object::new(ctx), 
             nft, 
             price: price_in_tkt_mist, 
             is_available: true,
-            seller: provider_profile.owner, 
-            provider_id: object::id(provider_profile),
+            seller: sender, 
+            provider_id: nft.provider_id,
             is_tkt_listing: true
         };
-
-        let listing_id = object::id(&listing);
-        vector::push_back(&mut provider_profile.active_listings, listing_id);
+        
         event::emit(NftListed {
-            listing_id,
+            listing_id: object::id(&listing),
             nft_id: object::id(&listing.nft),
             price: price_in_tkt_mist,
             is_tkt_listing: true
         });
         transfer::share_object(listing);
     }
-   
+    
     // --- MODIFICADO: `purchase` ahora distribuye comisiones ---
    public entry fun purchase(
         listing: Listing,
