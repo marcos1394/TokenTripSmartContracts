@@ -181,6 +181,19 @@ module tokentrip_experience::experience_nft {
         price: u64 
     }
 
+    public struct ProviderUpdated has copy, drop {
+        provider_id: ID,
+        is_verified: bool,
+        new_tier: u8,
+    }
+
+    public struct NftEvolved has copy, drop {
+        nft_id: ID,
+        // Podemos añadir los nuevos valores para que sea más fácil para los indexers
+        new_image_url: SuiUrl, 
+        new_description: StdString,
+    }
+
     public struct NftFractioned has copy, drop {
         parent_id: ID, 
         shares_created: u64 
