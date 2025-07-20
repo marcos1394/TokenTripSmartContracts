@@ -77,6 +77,12 @@ module tokentrip_rental_market::rental_market {
         is_tkt_listing: bool,
     }
 
+    public struct NftReclaimed has copy, drop {
+        listing_id: ID,
+        nft_id: ID,
+        owner: address,
+    }
+
     public struct FractionDelisted has copy, drop {
         listing_id: ID,
         owner: address,
@@ -355,6 +361,40 @@ module tokentrip_rental_market::rental_market {
             renter,
             receipt_id,
         });
+    }
+
+    /// [Dueño] Reclama su ExperienceNFT una vez que el periodo de alquiler ha terminado.
+    public entry fun reclaim_nft(
+        listing: RentalListing,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ) {
+        // Verificación 1: El periodo de alquiler debe haber terminado.
+        assert!(clock::timestamp_ms(clock) >= listing.end_timestamp_ms, E_RENTAL_PERIOD_NOT_OVER);
+        
+        let owner = tx_context::sender(ctx);
+        // Verificación 2: Solo el dueño original puede reclamar el NFT.
+        assert!(owner == listing.owner, E_UNAUTHORIZED);
+        
+        // Se desestructura el listado para obtener sus partes.
+        let RentalListing { id, fraction, experience_nft, owner, .. } = listing;
+
+        // Se extrae el NFT completo del Option.
+        let nft = option::destroy_some(experience_nft);
+        // Se destruye el Option de la fracción, que estaba vacío.
+        option::destroy_none(fraction);
+
+        // Se emite un evento para notificar al frontend.
+        event::emit(NftReclaimed {
+            listing_id: object::id_from_uid(&id),
+            nft_id: object::id(&nft),
+            owner,
+        });
+        
+        // Se transfiere el NFT de vuelta a su dueño original.
+        transfer::public_transfer(nft, owner);
+        // Se elimina el objeto de listado, que ya no es necesario.
+        object::delete(id);
     }
 
     /// [Dueño] Reclama su Fracción una vez que el periodo de alquiler ha terminado.
