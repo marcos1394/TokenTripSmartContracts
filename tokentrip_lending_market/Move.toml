@@ -1,0 +1,19 @@
+[package]
+name = "tokentrip_lending_market"
+version = "0.0.1"
+edition = "2024.alpha"
+
+[dependencies]
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "testnet" }
+tokentrip_experiences = { local = "../tokentrip_experiences" }
+
+# Dependencia para el token USDC de Wormhole en Testnet
+wormhole = { git = "https://github.com/wormhole-foundation/wormhole.git", subdir = "sui/wormhole", rev = "sui-testnet" }
+
+
+[addresses]
+tokentrip_lending_market = "0x0"
+tokentrip_experiences = "0x0"
+
+# Dirección del paquete de Wormhole en Testnet
+wormhole_testnet = "0x1e42e56877869b823e5b1f32a0c7c34d08405d41b51e18c5e62f4007f7943a59"
