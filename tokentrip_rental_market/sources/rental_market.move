@@ -390,6 +390,121 @@ module tokentrip_rental_market::rental_market {
         });
     }
 
+    /// [Inquilino] Alquila un NFT completo pagando con SUI.
+    public entry fun rent_nft(
+        listing: &mut RentalListing,
+        vip_registry: &VipRegistry,
+        staking_pool: &mut StakingPool,
+        payment: Coin<SUI>,
+        ctx: &mut TxContext
+    ) {
+        // --- 1. Verificaciones ---
+        assert!(!listing.is_tkt_listing, E_WRONG_CURRENCY);
+        assert!(!listing.is_rented, E_ALREADY_RENTED);
+        let price = listing.price;
+        assert!(coin::value(&payment) >= price, E_INSUFFICIENT_FUNDS);
+
+        let renter = tx_context::sender(ctx);
+        listing.is_rented = true;
+
+        // --- 2. Lógica de Comisiones para SUI ---
+        let mut payment_balance = coin::into_balance(payment);
+        let fee_rate = if (table::contains(&vip_registry.vips, listing.owner)) { VIP_FEE_BASIS_POINTS } else { PLATFORM_FEE_BASIS_POINTS };
+        let fee_amount = (price * fee_rate) / 10000;
+        
+        if (fee_amount > 0) {
+            let fee_balance = balance::split(&mut payment_balance, fee_amount);
+            staking::deposit_rewards(staking_pool, coin::from_balance(fee_balance, ctx));
+        };
+        
+        transfer::public_transfer(coin::from_balance(payment_balance, ctx), listing.owner);
+
+        // --- 3. Creación y Transferencia del Recibo ---
+        let nft = option::borrow(&listing.experience_nft);
+        let receipt = RentalReceipt {
+            id: object::new(ctx),
+            renter,
+            original_fraction_id: object::id(nft), // Se usa el ID del NFT completo
+            parent_nft_name: experience_nft::name(nft), // Se usa el getter
+            parent_nft_image_url: experience_nft::image_url(nft), // Se usa el getter
+            start_timestamp_ms: listing.start_timestamp_ms,
+            end_timestamp_ms: listing.end_timestamp_ms,
+        };
+        let receipt_id = object::id(&receipt);
+        transfer::public_transfer(receipt, renter);
+
+        // --- 4. Emisión del Evento ---
+        // Nota: Podemos reusar `FractionRented` o crear `NftRented`. Por simplicidad, lo reusamos.
+        event::emit(FractionRented {
+            listing_id: object::id(listing),
+            fraction_id: object::id(nft),
+            owner: listing.owner,
+            renter,
+            receipt_id,
+        });
+    }
+
+    /// [Inquilino] Alquila un NFT completo pagando con TKT.
+    public entry fun rent_nft_tkt(
+        listing: &mut RentalListing,
+        vip_registry: &VipRegistry,
+        dao_treasury: &mut DAOTreasury,
+        tkt_treasury_cap: &mut TreasuryCap<TKT>,
+        payment: Coin<TKT>,
+        ctx: &mut TxContext
+    ) {
+        // --- 1. Verificaciones ---
+        assert!(listing.is_tkt_listing, E_WRONG_CURRENCY);
+        assert!(!listing.is_rented, E_ALREADY_RENTED);
+        let price = listing.price;
+        assert!(coin::value(&payment) >= price, E_INSUFFICIENT_FUNDS);
+
+        let renter = tx_context::sender(ctx);
+        listing.is_rented = true;
+
+        // --- 2. Lógica de Comisiones para TKT ---
+        let mut payment_balance = coin::into_balance(payment);
+        let fee_rate = if (table::contains(&vip_registry.vips, listing.owner)) { VIP_FEE_BASIS_POINTS } else { PLATFORM_FEE_BASIS_POINTS };
+        let fee_amount = (price * fee_rate) / 10000;
+        
+        if (fee_amount > 0) {
+            let mut fee_balance = balance::split(&mut payment_balance, fee_amount);
+            let fee_value = balance::value(&fee_balance);
+
+            let rewards_part = balance::split(&mut fee_balance, fee_value * 40 / 100);
+            let dao_part = balance::split(&mut fee_balance, fee_value * 30 / 100);
+            
+            dao::deposit_to_treasury(dao_treasury, coin::from_balance(rewards_part, ctx));
+            dao::deposit_to_treasury(dao_treasury, coin::from_balance(dao_part, ctx));
+            coin::burn(tkt_treasury_cap, coin::from_balance(fee_balance, ctx));
+        };
+        
+        transfer::public_transfer(coin::from_balance(payment_balance, ctx), listing.owner);
+
+        // --- 3. Creación y Transferencia del Recibo ---
+        let nft = option::borrow(&listing.experience_nft);
+        let receipt = RentalReceipt {
+            id: object::new(ctx),
+            renter,
+            original_fraction_id: object::id(nft),
+            parent_nft_name: experience_nft::name(nft),
+            parent_nft_image_url: experience_nft::image_url(nft),
+            start_timestamp_ms: listing.start_timestamp_ms,
+            end_timestamp_ms: listing.end_timestamp_ms,
+        };
+        let receipt_id = object::id(&receipt);
+        transfer::public_transfer(receipt, renter);
+        
+        // --- 4. Emisión del Evento ---
+        event::emit(FractionRented {
+            listing_id: object::id(listing),
+            fraction_id: object::id(nft),
+            owner: listing.owner,
+            renter,
+            receipt_id,
+        });
+    }
+
     /// [Dueño] Reclama su ExperienceNFT una vez que el periodo de alquiler ha terminado.
     public entry fun reclaim_nft(
         listing: RentalListing,
