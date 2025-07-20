@@ -71,6 +71,11 @@ module tokentrip_rental_market::rental_market {
         is_tkt_listing: bool,
     }
 
+    public struct FractionDelisted has copy, drop {
+        listing_id: ID,
+        owner: address,
+    }
+
     public struct FractionRented has copy, drop {
         listing_id: ID,
         fraction_id: ID,
@@ -116,6 +121,26 @@ module tokentrip_rental_market::rental_market {
         });
 
         transfer::share_object(listing);
+    }
+
+/// [Dueño] Cancela un listado de alquiler y reclama su Fracción, si no ha sido alquilada.
+    public entry fun delist_fraction(
+        listing: RentalListing,
+        ctx: &mut TxContext
+    ) {
+        let sender = tx_context::sender(ctx);
+        assert!(sender == listing.owner, E_UNAUTHORIZED);
+        assert!(!listing.is_rented, E_ALREADY_RENTED);
+        
+        let RentalListing { id, fraction, owner, .. } = listing;
+
+        event::emit(FractionDelisted {
+            listing_id: object::id_from_uid(&id),
+            owner,
+        });
+        
+        transfer::public_transfer(fraction, owner);
+        object::delete(id);
     }
 
     /// [Dueño] Lista una Fracción para alquilar a cambio de TKT.
