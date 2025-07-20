@@ -11,9 +11,9 @@ module tokentrip_rental_market::rental_market {
     use std::string::{String as StdString};
     use sui::url::{Url as SuiUrl};
     
-    // --- IMPORTACIONES DE OTROS MÓDULOS ---
-    use tokentrip_experiences::experience_nft::Fraction;
-    use tokentrip_token::tkt::TKT;
+    use tokentrip_experiences::experience_nft::{self, ExperienceNFT, VipRegistry};
+    use tokentrip_staking::staking::{self, StakingPool};
+    use tokentrip_dao::dao::{self, DAOTreasury};
 
     // --- CÓDIGOS DE ERROR ---
     const E_ALREADY_RENTED: u64 = 1;
@@ -21,6 +21,9 @@ module tokentrip_rental_market::rental_market {
     const E_UNAUTHORIZED: u64 = 3;
     const E_INSUFFICIENT_FUNDS: u64 = 4;
     const E_WRONG_CURRENCY: u64 = 5;
+
+    const PLATFORM_FEE_BASIS_POINTS: u64 = 500; // 5.00%
+    const VIP_FEE_BASIS_POINTS: u64 = 250; // 2.50% para VIPs
 
     // --- STRUCTS ---
     
@@ -266,37 +269,7 @@ module tokentrip_rental_market::rental_market {
         object::delete(id);
     }
 
-    /// [Dueño] Lista una Fracción para alquilar a cambio de TKT.
-    public entry fun list_fraction_for_rent_tkt(
-        fraction: Fraction,
-        price_in_tkt_mist: u64,
-        start_timestamp_ms: u64,
-        end_timestamp_ms: u64,
-        ctx: &mut TxContext
-    ) {
-        let owner = tx_context::sender(ctx);
-        let listing = RentalListing {
-            id: object::new(ctx),
-            fraction,
-            owner,
-            price: price_in_tkt_mist,
-            is_tkt_listing: true,
-            start_timestamp_ms,
-            end_timestamp_ms,
-            is_rented: false,
-        };
-
-        // --- CORRECCIÓN: Se completa el evento ---
-        event::emit(FractionListedForRent {
-            listing_id: object::id(&listing),
-            fraction_id: object::id(&listing.fraction),
-            owner,
-            price: price_in_tkt_mist,
-            is_tkt_listing: true,
-        });
-
-        transfer::share_object(listing);
-    }
+    
     
     /// [Inquilino] Alquila una Fracción pagando con SUI.
     public entry fun rent_fraction(
