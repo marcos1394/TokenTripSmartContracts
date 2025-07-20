@@ -1,0 +1,14 @@
+[package]
+name = "tokentrip_rental_market"
+version = "0.0.1"
+edition = "2024.alpha"
+
+[dependencies]
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "testnet" }
+tokentrip_experiences = { local = "../tokentrip_experiences" }
+tokentrip_token = { local = "../tokentrip_token" }
+
+[addresses]
+tokentrip_rental_market = "0x0"
+tokentrip_experiences = "0x0"
+tokentrip_token = "0x0"
