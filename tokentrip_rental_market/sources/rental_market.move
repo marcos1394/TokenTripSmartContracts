@@ -272,97 +272,118 @@ module tokentrip_rental_market::rental_market {
     
     
     /// [Inquilino] Alquila una Fracción pagando con SUI.
+   /// [Inquilino] Alquila una Fracción pagando con SUI, aplicando comisiones y descuentos VIP.
     public entry fun rent_fraction(
         listing: &mut RentalListing,
+        vip_registry: &VipRegistry,
+        staking_pool: &mut StakingPool,
         payment: Coin<SUI>,
         ctx: &mut TxContext
     ) {
+        // --- 1. Verificaciones ---
         assert!(!listing.is_tkt_listing, E_WRONG_CURRENCY);
         assert!(!listing.is_rented, E_ALREADY_RENTED);
-        assert!(coin::value(&payment) >= listing.price, E_INSUFFICIENT_FUNDS);
+        let price = listing.price;
+        assert!(coin::value(&payment) >= price, E_INSUFFICIENT_FUNDS);
 
         let renter = tx_context::sender(ctx);
         listing.is_rented = true;
 
+        // --- 2. Lógica de Comisiones para SUI ---
+        let mut payment_balance = coin::into_balance(payment);
+        let fee_rate = if (table::contains(&vip_registry.vips, listing.owner)) { VIP_FEE_BASIS_POINTS } else { PLATFORM_FEE_BASIS_POINTS };
+        let fee_amount = (price * fee_rate) / 10000;
+        
+        if (fee_amount > 0) {
+            let fee_balance = balance::split(&mut payment_balance, fee_amount);
+            // La comisión en SUI se deposita en el pool de staking como recompensas
+            staking::deposit_rewards(staking_pool, coin::from_balance(fee_balance, ctx));
+        };
+        
+        // El resto del pago va al dueño de la fracción
+        transfer::public_transfer(coin::from_balance(payment_balance, ctx), listing.owner);
+
+        // --- 3. Creación y Transferencia del Recibo ---
+        let fraction = option::borrow(&listing.fraction);
         let receipt = RentalReceipt {
             id: object::new(ctx),
             renter,
-            original_fraction_id: object::id(&listing.fraction),
-            parent_nft_name: listing.fraction.parent_name,
-            parent_nft_image_url: listing.fraction.parent_image_url,
+            original_fraction_id: object::id(fraction),
+            parent_nft_name: fraction.parent_name,
+            parent_nft_image_url: fraction.parent_image_url,
             start_timestamp_ms: listing.start_timestamp_ms,
             end_timestamp_ms: listing.end_timestamp_ms,
         };
         let receipt_id = object::id(&receipt);
         transfer::public_transfer(receipt, renter);
-        
-        // El pago se transfiere directamente al dueño de la fracción
-        transfer::public_transfer(payment, listing.owner);
 
+        // --- 4. Emisión del Evento ---
         event::emit(FractionRented {
             listing_id: object::id(listing),
-            fraction_id: object::id(&listing.fraction),
+            fraction_id: object::id(fraction),
             owner: listing.owner,
             renter,
             receipt_id,
         });
     }
 
-    /// [Inquilino] Alquila una Fracción pagando con TKT, aplicando la tokenomics de la plataforma.
+    /// [Inquilino] Alquila una Fracción pagando con TKT, aplicando comisiones, descuentos VIP y el "flywheel".
     public entry fun rent_fraction_tkt(
         listing: &mut RentalListing,
-        dao_treasury: &mut DAOTreasury, // <-- AÑADIDO
-        tkt_treasury_cap: &mut TreasuryCap<TKT>, // <-- AÑADIDO
+        vip_registry: &VipRegistry,
+        dao_treasury: &mut DAOTreasury,
+        tkt_treasury_cap: &mut TreasuryCap<TKT>,
         payment: Coin<TKT>,
         ctx: &mut TxContext
     ) {
+        // --- 1. Verificaciones ---
         assert!(listing.is_tkt_listing, E_WRONG_CURRENCY);
         assert!(!listing.is_rented, E_ALREADY_RENTED);
         let price = listing.price;
         assert!(coin::value(&payment) >= price, E_INSUFFICIENT_FUNDS);
 
-        listing.is_rented = true;
         let renter = tx_context::sender(ctx);
-
-        // --- INICIA LÓGICA DE ECONOMÍA ---
-        let mut payment_balance = coin::into_balance(payment);
+        listing.is_rented = true;
         
-        // Se calcula y separa la comisión de la plataforma (ej. 5%)
-        let fee_amount = (price * PLATFORM_FEE_BASIS_POINTS) / 10000;
-        let mut fee_balance = balance::split(&mut payment_balance, fee_amount);
+        // --- 2. Lógica de Comisiones para TKT ---
+        let mut payment_balance = coin::into_balance(payment);
+        let fee_rate = if (table::contains(&vip_registry.vips, listing.owner)) { VIP_FEE_BASIS_POINTS } else { PLATFORM_FEE_BASIS_POINTS };
+        let fee_amount = (price * fee_rate) / 10000;
+        
+        if (fee_amount > 0) {
+            let mut fee_balance = balance::split(&mut payment_balance, fee_amount);
+            let fee_value = balance::value(&fee_balance);
 
-        // El resto del pago (95%) va al dueño de la fracción.
+            // Se distribuye la comisión (flywheel)
+            let rewards_part = balance::split(&mut fee_balance, fee_value * 40 / 100);
+            let dao_part = balance::split(&mut fee_balance, fee_value * 30 / 100);
+            
+            dao::deposit_to_treasury(dao_treasury, coin::from_balance(rewards_part, ctx));
+            dao::deposit_to_treasury(dao_treasury, coin::from_balance(dao_part, ctx));
+            coin::burn(tkt_treasury_cap, coin::from_balance(fee_balance, ctx));
+        };
+        
+        // El resto del pago va al dueño de la fracción
         transfer::public_transfer(coin::from_balance(payment_balance, ctx), listing.owner);
 
-        // Se distribuye la comisión (el 5% restante)
-        let fee_value = balance::value(&fee_balance);
-        let rewards_part = balance::split(&mut fee_balance, fee_value * 40 / 100);
-        let dao_part = balance::split(&mut fee_balance, fee_value * 30 / 100);
-        
-        // El 40% (rewards) y el 30% (DAO) se depositan en la tesorería de la DAO.
-        deposit_to_treasury(dao_treasury, coin::from_balance(rewards_part, ctx));
-        deposit_to_treasury(dao_treasury, coin::from_balance(dao_part, ctx));
-
-        // El 30% restante se quema.
-        coin::burn(tkt_treasury_cap, coin::from_balance(fee_balance, ctx));
-        // --- FIN LÓGICA DE ECONOMÍA ---
-
+        // --- 3. Creación y Transferencia del Recibo ---
+        let fraction = option::borrow(&listing.fraction);
         let receipt = RentalReceipt {
             id: object::new(ctx),
             renter,
-            original_fraction_id: object::id(&listing.fraction),
-            parent_nft_name: listing.fraction.parent_name,
-            parent_nft_image_url: listing.fraction.parent_image_url,
+            original_fraction_id: object::id(fraction),
+            parent_nft_name: fraction.parent_name,
+            parent_nft_image_url: fraction.parent_image_url,
             start_timestamp_ms: listing.start_timestamp_ms,
             end_timestamp_ms: listing.end_timestamp_ms,
         };
         let receipt_id = object::id(&receipt);
-        
         transfer::public_transfer(receipt, renter);
 
+        // --- 4. Emisión del Evento ---
         event::emit(FractionRented {
             listing_id: object::id(listing),
-            fraction_id: object::id(&listing.fraction),
+            fraction_id: object::id(fraction),
             owner: listing.owner,
             renter,
             receipt_id,
