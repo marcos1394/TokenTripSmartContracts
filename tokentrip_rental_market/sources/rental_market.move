@@ -163,7 +163,15 @@ module tokentrip_rental_market::rental_market {
             is_rented: false,
         };
 
-        event::emit(FractionListedForRent { /* ... */ });
+        // --- CORRECCIÓN: Se completa el evento ---
+        event::emit(FractionListedForRent {
+            listing_id: object::id(&listing),
+            fraction_id: object::id(&listing.fraction),
+            owner,
+            price: price_in_tkt_mist,
+            is_tkt_listing: true,
+        });
+
         transfer::share_object(listing);
     }
     
