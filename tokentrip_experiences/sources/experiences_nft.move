@@ -231,6 +231,18 @@ module tokentrip_experience::experience_nft {
         table::add(&mut registry.vips, provider_address, true);
     }
 
+    // --- AÑADE ESTAS DOS FUNCIONES ---
+
+    /// Devuelve el nombre de un ExperienceNFT.
+    public fun name(nft: &ExperienceNFT): StdString {
+        nft.name
+    }
+
+    /// Devuelve la URL de la imagen de un ExperienceNFT.
+    public fun image_url(nft: &ExperienceNFT): SuiUrl {
+        nft.image_url
+    }
+
     public entry fun remove_vip(
         _admin_cap: &AdminCap,
         registry: &mut VipRegistry,
