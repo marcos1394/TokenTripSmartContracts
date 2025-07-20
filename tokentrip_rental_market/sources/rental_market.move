@@ -28,19 +28,17 @@ module tokentrip_rental_market::rental_market {
     /// Guarda la Fracción en escrow hasta que el alquiler termina.
     public struct RentalListing has key, store {
         id: UID,
-        /// La Fracción que está en alquiler, guardada de forma segura.
-        fraction: Fraction,
-        /// El dueño original de la Fracción.
+        // --- INICIA CORRECCIÓN ---
+        /// La Fracción que está en alquiler (si es un alquiler fraccional).
+        fraction: Option<Fraction>,
+        /// El NFT completo que está en alquiler (si es un alquiler completo).
+        experience_nft: Option<ExperienceNFT>,
+        // --- FIN CORRECCIÓN ---
         owner: address,
-        /// El precio del alquiler.
         price: u64,
-        /// `true` si el precio es en TKT.
         is_tkt_listing: bool,
-        /// Timestamp de inicio del periodo de alquiler.
         start_timestamp_ms: u64,
-        /// Timestamp de fin del periodo de alquiler.
         end_timestamp_ms: u64,
-        /// `true` si la fracción ya ha sido alquilada.
         is_rented: bool,
     }
 
@@ -66,6 +64,14 @@ module tokentrip_rental_market::rental_market {
     public struct FractionListedForRent has copy, drop {
         listing_id: ID,
         fraction_id: ID,
+        owner: address,
+        price: u64,
+        is_tkt_listing: bool,
+    }
+
+    public struct NftListedForRent has copy, drop {
+        listing_id: ID,
+        nft_id: ID,
         owner: address,
         price: u64,
         is_tkt_listing: bool,
@@ -118,6 +124,84 @@ module tokentrip_rental_market::rental_market {
             owner,
             price: price_in_mist,
             is_tkt_listing: false,
+        });
+
+        transfer::share_object(listing);
+    }
+
+    /// [Dueño] Lista un ExperienceNFT completo para alquilar a cambio de SUI.
+    public entry fun list_nft_for_rent(
+        nft: ExperienceNFT,
+        price_in_mist: u64,
+        start_timestamp_ms: u64,
+        end_timestamp_ms: u64,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ) {
+        // Verificación de que el NFT no ha expirado.
+        assert!(
+            nft.expiration_timestamp_ms == 0 || clock::timestamp_ms(clock) < nft.expiration_timestamp_ms,
+            E_UNAUTHORIZED
+        );
+
+        let owner = tx_context::sender(ctx);
+        let listing = RentalListing {
+            id: object::new(ctx),
+            fraction: option::none(),
+            experience_nft: option::some(nft),
+            owner,
+            price: price_in_mist,
+            is_tkt_listing: false,
+            start_timestamp_ms,
+            end_timestamp_ms,
+            is_rented: false,
+        };
+        
+        event::emit(NftListedForRent {
+            listing_id: object::id(&listing),
+            nft_id: object::id(option::borrow(&listing.experience_nft)),
+            owner,
+            price: price_in_mist,
+            is_tkt_listing: false,
+        });
+
+        transfer::share_object(listing);
+    }
+
+    /// [Dueño] Lista un ExperienceNFT completo para alquilar a cambio de TKT.
+    public entry fun list_nft_for_rent_tkt(
+        nft: ExperienceNFT,
+        price_in_tkt_mist: u64,
+        start_timestamp_ms: u64,
+        end_timestamp_ms: u64,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ) {
+        // Verificación de que el NFT no ha expirado.
+        assert!(
+            nft.expiration_timestamp_ms == 0 || clock::timestamp_ms(clock) < nft.expiration_timestamp_ms,
+            E_UNAUTHORIZED
+        );
+
+        let owner = tx_context::sender(ctx);
+        let listing = RentalListing {
+            id: object::new(ctx),
+            fraction: option::none(),
+            experience_nft: option::some(nft),
+            owner,
+            price: price_in_tkt_mist,
+            is_tkt_listing: true,
+            start_timestamp_ms,
+            end_timestamp_ms,
+            is_rented: false,
+        };
+        
+        event::emit(NftListedForRent {
+            listing_id: object::id(&listing),
+            nft_id: object::id(option::borrow(&listing.experience_nft)),
+            owner,
+            price: price_in_tkt_mist,
+            is_tkt_listing: true,
         });
 
         transfer::share_object(listing);
