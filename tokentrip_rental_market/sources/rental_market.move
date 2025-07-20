@@ -91,6 +91,11 @@ module tokentrip_rental_market::rental_market {
         owner: address,
     }
 
+    public struct NftDelisted has copy, drop {
+        listing_id: ID,
+        owner: address,
+    }
+
     public struct FractionRented has copy, drop {
         listing_id: ID,
         fraction_id: ID,
@@ -503,6 +508,29 @@ module tokentrip_rental_market::rental_market {
             renter,
             receipt_id,
         });
+    }
+
+    /// [Dueño] Cancela un listado de alquiler de un NFT completo.
+    public entry fun delist_nft(
+        listing: RentalListing,
+        ctx: &mut TxContext
+    ) {
+        let sender = tx_context::sender(ctx);
+        assert!(sender == listing.owner, E_UNAUTHORIZED);
+        assert!(!listing.is_rented, E_ALREADY_RENTED);
+        
+        let RentalListing { id, fraction, experience_nft, owner, .. } = listing;
+
+        let nft = option::destroy_some(experience_nft);
+        option::destroy_none(fraction);
+
+        event::emit(NftDelisted {
+            listing_id: object::id_from_uid(&id),
+            owner,
+        });
+        
+        transfer::public_transfer(nft, owner);
+        object::delete(id);
     }
 
     /// [Dueño] Reclama su ExperienceNFT una vez que el periodo de alquiler ha terminado.
