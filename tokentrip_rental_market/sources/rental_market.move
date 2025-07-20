@@ -179,7 +179,66 @@ module tokentrip_rental_market::rental_market {
         });
     }
 
-    // (Aquí iría la función `rent_fraction_tkt`, que sería casi idéntica pero aceptando Coin<TKT>)
+    /// [Inquilino] Alquila una Fracción pagando con TKT, aplicando la tokenomics de la plataforma.
+    public entry fun rent_fraction_tkt(
+        listing: &mut RentalListing,
+        dao_treasury: &mut DAOTreasury, // <-- AÑADIDO
+        tkt_treasury_cap: &mut TreasuryCap<TKT>, // <-- AÑADIDO
+        payment: Coin<TKT>,
+        ctx: &mut TxContext
+    ) {
+        assert!(listing.is_tkt_listing, E_WRONG_CURRENCY);
+        assert!(!listing.is_rented, E_ALREADY_RENTED);
+        let price = listing.price;
+        assert!(coin::value(&payment) >= price, E_INSUFFICIENT_FUNDS);
+
+        listing.is_rented = true;
+        let renter = tx_context::sender(ctx);
+
+        // --- INICIA LÓGICA DE ECONOMÍA ---
+        let mut payment_balance = coin::into_balance(payment);
+        
+        // Se calcula y separa la comisión de la plataforma (ej. 5%)
+        let fee_amount = (price * PLATFORM_FEE_BASIS_POINTS) / 10000;
+        let mut fee_balance = balance::split(&mut payment_balance, fee_amount);
+
+        // El resto del pago (95%) va al dueño de la fracción.
+        transfer::public_transfer(coin::from_balance(payment_balance, ctx), listing.owner);
+
+        // Se distribuye la comisión (el 5% restante)
+        let fee_value = balance::value(&fee_balance);
+        let rewards_part = balance::split(&mut fee_balance, fee_value * 40 / 100);
+        let dao_part = balance::split(&mut fee_balance, fee_value * 30 / 100);
+        
+        // El 40% (rewards) y el 30% (DAO) se depositan en la tesorería de la DAO.
+        deposit_to_treasury(dao_treasury, coin::from_balance(rewards_part, ctx));
+        deposit_to_treasury(dao_treasury, coin::from_balance(dao_part, ctx));
+
+        // El 30% restante se quema.
+        coin::burn(tkt_treasury_cap, coin::from_balance(fee_balance, ctx));
+        // --- FIN LÓGICA DE ECONOMÍA ---
+
+        let receipt = RentalReceipt {
+            id: object::new(ctx),
+            renter,
+            original_fraction_id: object::id(&listing.fraction),
+            parent_nft_name: listing.fraction.parent_name,
+            parent_nft_image_url: listing.fraction.parent_image_url,
+            start_timestamp_ms: listing.start_timestamp_ms,
+            end_timestamp_ms: listing.end_timestamp_ms,
+        };
+        let receipt_id = object::id(&receipt);
+        
+        transfer::public_transfer(receipt, renter);
+
+        event::emit(FractionRented {
+            listing_id: object::id(listing),
+            fraction_id: object::id(&listing.fraction),
+            owner: listing.owner,
+            renter,
+            receipt_id,
+        });
+    }
 
     /// [Dueño] Reclama su Fracción una vez que el periodo de alquiler ha terminado.
     public entry fun reclaim_fraction(
