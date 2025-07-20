@@ -24,31 +24,27 @@ module tokentrip_lending_market::lending_market {
     /// Contiene el NFT en escrow y los términos deseados por el prestatario.
     public struct LoanRequest has key, store {
         id: UID,
-        /// El NFT ofrecido como colateral.
-        nft: ExperienceNFT,
-        /// La dirección del prestatario (dueño del NFT).
+        // --- CORRECCIÓN: Ahora puede guardar un NFT o una Fracción ---
+        nft: Option<ExperienceNFT>,
+        fraction: Option<Fraction>,
         borrower: address,
-        /// La cantidad de USDC que el prestatario desea recibir.
         principal_amount: u64,
-        /// La cantidad total de USDC que el prestatario pagará.
         repayment_amount: u64,
-        /// La duración del préstamo en milisegundos.
         duration_ms: u64,
+        is_tkt_loan: bool, // Para saber la moneda del préstamo
     }
 
     /// Un objeto compartido que representa un préstamo activo y financiado.
-    public struct ActiveLoan has key, store {
+     public struct ActiveLoan has key, store {
         id: UID,
-        /// El NFT guardado como colateral.
-        nft: ExperienceNFT,
-        /// La dirección del prestatario.
+        // --- CORRECCIÓN: Ahora puede guardar un NFT o una Fracción ---
+        nft: Option<ExperienceNFT>,
+        fraction: Option<Fraction>,
         borrower: address,
-        /// La dirección del prestamista.
         lender: address,
-        /// La cantidad de USDC a devolver.
         repayment_amount: u64,
-        /// El timestamp exacto en que el préstamo vence.
         due_timestamp_ms: u64,
+        is_tkt_loan: bool,
     }
 
     // --- EVENTOS ---
