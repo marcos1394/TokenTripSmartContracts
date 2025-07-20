@@ -105,6 +105,7 @@ module tokentrip_rental_market::rental_market {
     // --- FUNCIONES ---
 
     /// [Dueño] Lista una Fracción para alquilar a cambio de SUI.
+    /// [Dueño] Lista una Fracción para alquilar a cambio de SUI.
     public entry fun list_fraction_for_rent(
         fraction: Fraction,
         price_in_mist: u64,
@@ -115,7 +116,9 @@ module tokentrip_rental_market::rental_market {
         let owner = tx_context::sender(ctx);
         let listing = RentalListing {
             id: object::new(ctx),
-            fraction,
+            // Se guarda la fracción dentro de un Option, y el NFT completo como None
+            fraction: option::some(fraction),
+            experience_nft: option::none(),
             owner,
             price: price_in_mist,
             is_tkt_listing: false,
@@ -126,10 +129,42 @@ module tokentrip_rental_market::rental_market {
         
         event::emit(FractionListedForRent {
             listing_id: object::id(&listing),
-            fraction_id: object::id(&listing.fraction),
+            fraction_id: object::id(option::borrow(&listing.fraction)),
             owner,
             price: price_in_mist,
             is_tkt_listing: false,
+        });
+
+        transfer::share_object(listing);
+    }
+
+    /// [Dueño] Lista una Fracción para alquilar a cambio de TKT.
+    public entry fun list_fraction_for_rent_tkt(
+        fraction: Fraction,
+        price_in_tkt_mist: u64,
+        start_timestamp_ms: u64,
+        end_timestamp_ms: u64,
+        ctx: &mut TxContext
+    ) {
+        let owner = tx_context::sender(ctx);
+        let listing = RentalListing {
+            id: object::new(ctx),
+            fraction: option::some(fraction),
+            experience_nft: option::none(),
+            owner,
+            price: price_in_tkt_mist,
+            is_tkt_listing: true,
+            start_timestamp_ms,
+            end_timestamp_ms,
+            is_rented: false,
+        };
+
+        event::emit(FractionListedForRent {
+            listing_id: object::id(&listing),
+            fraction_id: object::id(option::borrow(&listing.fraction)),
+            owner,
+            price: price_in_tkt_mist,
+            is_tkt_listing: true,
         });
 
         transfer::share_object(listing);
@@ -144,7 +179,6 @@ module tokentrip_rental_market::rental_market {
         clock: &Clock,
         ctx: &mut TxContext
     ) {
-        // Verificación de que el NFT no ha expirado.
         assert!(
             nft.expiration_timestamp_ms == 0 || clock::timestamp_ms(clock) < nft.expiration_timestamp_ms,
             E_UNAUTHORIZED
@@ -183,7 +217,6 @@ module tokentrip_rental_market::rental_market {
         clock: &Clock,
         ctx: &mut TxContext
     ) {
-        // Verificación de que el NFT no ha expirado.
         assert!(
             nft.expiration_timestamp_ms == 0 || clock::timestamp_ms(clock) < nft.expiration_timestamp_ms,
             E_UNAUTHORIZED
