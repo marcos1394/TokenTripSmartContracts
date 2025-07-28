@@ -10,7 +10,9 @@ module tokentrip_experience::experience_nft {
     use sui::sui::SUI;
     use sui::balance::{Self, Balance};
     use sui::table::{Self, Table};
+    use sui::clock::{Self, Clock};
     use std::vector;
+    use std::bcs;
     
     // --- IMPORTACIONES DE NUESTROS OTROS MÓDULOS ---
     use tokentrip_token::tkt::TKT;
@@ -264,7 +266,7 @@ module tokentrip_experience::experience_nft {
             owner: sender, 
             name: utf8(name_bytes), 
             bio: utf8(bio_bytes),
-            image_url: url::new_unsafe_from_bytes(image_url_bytes),
+            image_url: new_unsafe_from_bytes(image_url_bytes),
             category: utf8(category_bytes),
             metadata: vector::empty(),
             // --- Se inicializan los nuevos campos y se elimina active_listings ---
@@ -324,8 +326,7 @@ module tokentrip_experience::experience_nft {
                     nft.description = rule.new_description;
                     
                     // Se añaden los nuevos atributos
-                    vector::append(&mut nft.attributes, &mut rule.attributes_to_add);
-
+                    vector::append(&mut nft.attributes, rule.attributes_to_add);
                     // Se marca la regla como activada para que no vuelva a usarse
                     rule.is_triggered = true;
                 }
@@ -335,7 +336,9 @@ module tokentrip_experience::experience_nft {
 
         // Se emite un evento para notificar al mundo exterior del cambio
         event::emit(NftEvolved {
-            nft_id: object::id(nft)
+            nft_id: object::id(nft),
+            new_image_url: nft.image_url,
+            new_description: nft.description,
         });
     }
 
@@ -369,7 +372,6 @@ module tokentrip_experience::experience_nft {
     }
 
     /// Permite a un proveedor registrado crear (mintear) un nuevo NFT de experiencia.
-    /// Permite a un proveedor registrado crear (mintear) un nuevo NFT de experiencia.
     public entry fun provider_mint_experience(
         provider_profile: &ProviderProfile,
         name_bytes: vector<u8>, 
@@ -382,20 +384,23 @@ module tokentrip_experience::experience_nft {
         tier_bytes: vector<u8>, 
         serial_number: u64, 
         collection_name_bytes: vector<u8>,
-        attributes: vector<Attribute>,
+        // --- CORRECCIÓN: Se reciben los vectores como bytes ---
+        attributes_bytes: vector<u8>,
+        rules_bytes: vector<u8>,
         is_redeemable: bool,
         expiration_timestamp_ms: u64,
-        evolution_rules: vector<EvolutionRule>, // <-- AÑADIDO: Se reciben las reglas
         ctx: &mut TxContext
     ) {
         // La verificación de autorización se mantiene igual
         assert!(tx_context::sender(ctx) == provider_profile.owner, E_UNAUTHORIZED);
+        let attributes: vector<Attribute> = bcs::from_bytes(attributes_bytes);
+        let evolution_rules: vector<EvolutionRule> = bcs::from_bytes(rules_bytes);
 
         let nft = ExperienceNFT {
             id: object::new(ctx),
             name: utf8(name_bytes),
             description: utf8(description_bytes),
-            image_url: url::new_unsafe_from_bytes(image_url_bytes),
+            image_url: new_unsafe_from_bytes(image_url_bytes),
             event_name: utf8(event_name_bytes),
             event_city: utf8(event_city_bytes),
             validity_details: utf8(validity_details_bytes),

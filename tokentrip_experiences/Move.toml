@@ -11,6 +11,6 @@ tokentrip_staking = { local = "../tokentrip_staking" }
 
 [addresses]
 tokentrip_experience = "0x0"
-tokentrip_token = "0x0"
-tokentrip_dao = "0x0"
-tokentrip_staking = "0x0"
+tokentrip_token = "0xed46584d450fc173a7796cdbc934248df25f0d46700a3a852fb025f1d9a000b3"
+tokentrip_dao = "0xfa1a5a8c8f307f3bac14acd7b182ffef7fa5c28fc7fa905877127944e0339448"
+tokentrip_staking = "0xa94086668b5f56276dc40656b5afd660662bb18d1e4f2292bff11000591cf42a"
