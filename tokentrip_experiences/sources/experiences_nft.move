@@ -26,6 +26,8 @@ module tokentrip_experience::experience_nft {
     const E_UNAUTHORIZED: u64 = 4;
     const E_ALREADY_REVIEWED: u64 = 5;
     const E_WRONG_CURRENCY: u64 = 6;
+    // Al principio de tu archivo, con las otras constantes
+    const E_INVALID_ARGUMENT: u64 = 7; // O el siguiente número disponible
 
     // --- CONSTANTES ---
     const PLATFORM_FEE_BASIS_POINTS: u64 = 500; // 5.00%
@@ -130,7 +132,7 @@ module tokentrip_experience::experience_nft {
 
 // --- AÑADE ESTE NUEVO STRUCT ---
     /// Un trofeo digital intransferible que prueba la asistencia a una experiencia.
-    public struct ProofOfExperience has key {
+    public struct ProofOfExperience has key, store {
         id: UID,
         original_nft_name: StdString,
         image_url: SuiUrl,
@@ -372,6 +374,8 @@ module tokentrip_experience::experience_nft {
     }
 
     /// Permite a un proveedor registrado crear (mintear) un nuevo NFT de experiencia.
+   /// Permite a un proveedor registrado crear un nuevo NFT de experiencia,
+    /// recibiendo los atributos y reglas como vectores paralelos de datos primitivos.
     public entry fun provider_mint_experience(
         provider_profile: &ProviderProfile,
         name_bytes: vector<u8>, 
@@ -384,18 +388,58 @@ module tokentrip_experience::experience_nft {
         tier_bytes: vector<u8>, 
         serial_number: u64, 
         collection_name_bytes: vector<u8>,
-        // --- CORRECCIÓN: Se reciben los vectores como bytes ---
-        attributes_bytes: vector<u8>,
-        rules_bytes: vector<u8>,
+        
+        // Atributos como vectores paralelos
+        attribute_keys: vector<vector<u8>>,
+        attribute_values: vector<vector<u8>>,
+        
+        // Opciones de comportamiento
         is_redeemable: bool,
         expiration_timestamp_ms: u64,
+
+        // Reglas de evolución como vectores paralelos
+        rule_trigger_types: vector<u8>,
+        rule_trigger_values: vector<u64>,
+        rule_new_image_urls: vector<vector<u8>>,
+        rule_new_descriptions: vector<vector<u8>>,
+        
         ctx: &mut TxContext
     ) {
-        // La verificación de autorización se mantiene igual
+        // 1. Verificación de autorización
         assert!(tx_context::sender(ctx) == provider_profile.owner, E_UNAUTHORIZED);
-        let attributes: vector<Attribute> = bcs::from_bytes(attributes_bytes);
-        let evolution_rules: vector<EvolutionRule> = bcs::from_bytes(rules_bytes);
 
+        // 2. Reconstruir el vector<Attribute>
+        let mut attributes = vector::empty<Attribute>();
+        let mut i = 0;
+        let attr_len = vector::length(&attribute_keys);
+        assert!(vector::length(&attribute_values) == attr_len, E_INVALID_ARGUMENT); // Asegura consistencia
+        
+        while (i < attr_len) {
+            let key = utf8(*vector::borrow(&attribute_keys, i));
+            let value = utf8(*vector::borrow(&attribute_values, i));
+            vector::push_back(&mut attributes, Attribute { key, value });
+            i = i + 1;
+        };
+
+        // 3. Reconstruir el vector<EvolutionRule>
+        let mut evolution_rules = vector::empty<EvolutionRule>();
+        let mut j = 0;
+        let rules_len = vector::length(&rule_trigger_types);
+        // (Aquí irían más asserts para validar la consistencia de todos los vectores de reglas)
+
+        while (j < rules_len) {
+            vector::push_back(&mut evolution_rules, EvolutionRule {
+                trigger_type: *vector::borrow(&rule_trigger_types, j),
+                trigger_value: *vector::borrow(&rule_trigger_values, j),
+                new_image_url: new_unsafe_from_bytes(*vector::borrow(&rule_new_image_urls, j)),
+                new_description: utf8(*vector::borrow(&rule_new_descriptions, j)),
+                attributes_to_add: vector::empty(), // Simplificado por ahora
+                is_triggered: false,
+            });
+            j = j + 1;
+        };
+
+        // 4. Crear el struct del NFT
         let nft = ExperienceNFT {
             id: object::new(ctx),
             name: utf8(name_bytes),
@@ -418,12 +462,13 @@ module tokentrip_experience::experience_nft {
             provider_address: provider_profile.owner,
             is_redeemable: is_redeemable,
             expiration_timestamp_ms: expiration_timestamp_ms,
-            evolution_rules: evolution_rules, // <-- AÑADIDO: Se guardan las reglas
+            evolution_rules: evolution_rules,
         };
         
         let nft_id = object::id(&nft);
         let nft_name = nft.name;
         
+        // 5. Emitir el evento
         event::emit(NftMinted {
             object_id: nft_id,
             provider_id: object::id(provider_profile),
@@ -431,6 +476,7 @@ module tokentrip_experience::experience_nft {
             minter: provider_profile.owner
         });
 
+        // 6. Transferir el NFT al proveedor
         transfer::public_transfer(nft, provider_profile.owner);
     }
 
@@ -852,7 +898,28 @@ module tokentrip_experience::experience_nft {
         });
 
         // Se quema el NFT original después de fraccionarlo
-        let ExperienceNFT { id, name:_, description:_, image_url:_, event_name:_, event_city:_, validity_details:_, experience_type:_, issuer_name:_, tier:_, serial_number:_, attributes:_, collection_name:_, royalties:_, provider_id: _, provider_address: _ } = nft;
+        let ExperienceNFT { 
+    id, 
+    name:_, 
+    description:_, 
+    image_url:_, 
+    event_name:_, 
+    event_city:_, 
+    validity_details:_, 
+    experience_type:_, 
+    issuer_name:_, 
+    tier:_, 
+    serial_number:_, 
+    attributes:_, 
+    collection_name:_, 
+    royalties:_, 
+    provider_id: _, 
+    provider_address: _,
+    // --- LÍNEAS AÑADIDAS ---
+    is_redeemable: _,
+    expiration_timestamp_ms: _,
+    evolution_rules: _
+} = nft;
         object::delete(id);
     }
 
