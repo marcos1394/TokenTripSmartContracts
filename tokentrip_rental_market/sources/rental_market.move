@@ -20,8 +20,8 @@ module tokentrip_rental_market::rental_market {
         expiration_timestamp_ms,
         fraction_parent_name, fraction_parent_image_url
     };
-    use tokentrip_staking::staking::{StakingPool, deposit_rewards};
-    use tokentrip_dao::dao::{DAOTreasury, deposit_to_treasury};
+    use tokentrip_staking::staking::{Self, StakingPool}; // <-- CORRIGE EL ERROR DE 'StakingPool'
+    use tokentrip_dao::dao::{Self, DAOTreasury};
 
     
 
@@ -102,10 +102,7 @@ module tokentrip_rental_market::rental_market {
         owner: address
     }
 
-    public struct NftDelisted has copy, drop {
-        listing_id: ID,
-        owner: address,
-    }
+   public struct NftDelisted has copy, drop { listing_id: ID, nft_id: ID, owner: address }
 
     public struct FractionRented has copy, drop {
         listing_id: ID,
@@ -329,7 +326,7 @@ module tokentrip_rental_market::rental_market {
 
         // --- 2. Lógica de Comisiones para SUI ---
         let mut payment_balance = coin::into_balance(payment);
-        let fee_rate = if (experience_nft::is_vip(&vip_registry, listing.owner)) { VIP_FEE_BASIS_POINTS } else { PLATFORM_FEE_BASIS_POINTS };
+        let fee_rate = if (experience_nft::is_vip(vip_registry, listing.owner)) { VIP_FEE_BASIS_POINTS } else { PLATFORM_FEE_BASIS_POINTS };
         let fee_amount = (price * fee_rate) / 10000;
         
         if (fee_amount > 0) {
@@ -347,8 +344,8 @@ module tokentrip_rental_market::rental_market {
             id: object::new(ctx),
             renter,
             original_fraction_id: object::id(fraction),
-            parent_nft_name: fraction.parent_name,
-            parent_nft_image_url: fraction.parent_image_url,
+            parent_nft_name: experience_nft::fraction_parent_name(fraction),
+            parent_nft_image_url: experience_nft::fraction_parent_image_url(fraction),
             start_timestamp_ms: listing.start_timestamp_ms,
             end_timestamp_ms: listing.end_timestamp_ms,
         };
@@ -385,7 +382,7 @@ module tokentrip_rental_market::rental_market {
         
         // --- 2. Lógica de Comisiones para TKT ---
         let mut payment_balance = coin::into_balance(payment);
-        let fee_rate = if (table::contains(&vip_registry.vips, listing.owner)) { VIP_FEE_BASIS_POINTS } else { PLATFORM_FEE_BASIS_POINTS };
+        let fee_rate = if (experience_nft::is_vip(vip_registry, listing.owner)) { VIP_FEE_BASIS_POINTS } else { PLATFORM_FEE_BASIS_POINTS };
         let fee_amount = (price * fee_rate) / 10000;
         
         if (fee_amount > 0) {
@@ -410,8 +407,8 @@ module tokentrip_rental_market::rental_market {
             id: object::new(ctx),
             renter,
             original_fraction_id: object::id(fraction),
-            parent_nft_name: fraction.parent_name,
-            parent_nft_image_url: fraction.parent_image_url,
+            parent_nft_name: experience_nft::fraction_parent_name(fraction),
+            parent_nft_image_url: experience_nft::fraction_parent_image_url(fraction),
             start_timestamp_ms: listing.start_timestamp_ms,
             end_timestamp_ms: listing.end_timestamp_ms,
         };
@@ -447,7 +444,7 @@ module tokentrip_rental_market::rental_market {
 
         // --- 2. Lógica de Comisiones para SUI ---
         let mut payment_balance = coin::into_balance(payment);
-        let fee_rate = if (table::contains(&vip_registry.vips, listing.owner)) { VIP_FEE_BASIS_POINTS } else { PLATFORM_FEE_BASIS_POINTS };
+       let fee_rate = if (experience_nft::is_vip(vip_registry, listing.owner)){ VIP_FEE_BASIS_POINTS } else { PLATFORM_FEE_BASIS_POINTS };
         let fee_amount = (price * fee_rate) / 10000;
         
         if (fee_amount > 0) {
@@ -502,7 +499,7 @@ module tokentrip_rental_market::rental_market {
 
         // --- 2. Lógica de Comisiones para TKT ---
         let mut payment_balance = coin::into_balance(payment);
-        let fee_rate = if (table::contains(&vip_registry.vips, listing.owner)) { VIP_FEE_BASIS_POINTS } else { PLATFORM_FEE_BASIS_POINTS };
+        let fee_rate = if (experience_nft::is_vip(vip_registry, listing.owner)) { VIP_FEE_BASIS_POINTS } else { PLATFORM_FEE_BASIS_POINTS };
         let fee_amount = (price * fee_rate) / 10000;
         
         if (fee_amount > 0) {
@@ -544,6 +541,7 @@ module tokentrip_rental_market::rental_market {
     }
 
     /// [Dueño] Cancela un listado de alquiler de un NFT completo.
+    /// [Dueño] Cancela un listado de alquiler de un NFT completo.
     public entry fun delist_nft(
         listing: RentalListing,
         ctx: &mut TxContext
@@ -552,54 +550,58 @@ module tokentrip_rental_market::rental_market {
         assert!(sender == listing.owner, E_UNAUTHORIZED);
         assert!(!listing.is_rented, E_ALREADY_RENTED);
         
-        let RentalListing { id, fraction, experience_nft, owner, .. } = listing;
+        let listing_id = object::id(&listing);
 
-        let nft = option::destroy_some(experience_nft);
+        let RentalListing { 
+            id, fraction, experience_nft, owner,
+            price: _, is_tkt_listing: _, start_timestamp_ms: _, end_timestamp_ms: _, is_rented: _
+        } = listing;
+        
+        let nft_to_return = option::destroy_some(experience_nft);
         option::destroy_none(fraction);
 
         event::emit(NftDelisted {
-            listing_id: object::id_from_uid(&id),
+            listing_id,
+            nft_id: object::id(&nft_to_return),
             owner,
         });
         
-        transfer::public_transfer(nft, owner);
+        transfer::public_transfer(nft_to_return, owner);
         object::delete(id);
     }
 
+    /// [Dueño] Reclama su ExperienceNFT una vez que el periodo de alquiler ha terminado.
     /// [Dueño] Reclama su ExperienceNFT una vez que el periodo de alquiler ha terminado.
     public entry fun reclaim_nft(
         listing: RentalListing,
         clock: &Clock,
         ctx: &mut TxContext
     ) {
-        // Verificación 1: El periodo de alquiler debe haber terminado.
         assert!(clock::timestamp_ms(clock) >= listing.end_timestamp_ms, E_RENTAL_PERIOD_NOT_OVER);
-        
         let owner = tx_context::sender(ctx);
-        // Verificación 2: Solo el dueño original puede reclamar el NFT.
         assert!(owner == listing.owner, E_UNAUTHORIZED);
         
-        // Se desestructura el listado para obtener sus partes.
-        let RentalListing { id, fraction, experience_nft, owner, .. } = listing;
+        let listing_id = object::id(&listing);
 
-        // Se extrae el NFT completo del Option.
-        let nft = option::destroy_some(experience_nft);
-        // Se destruye el Option de la fracción, que estaba vacío.
+        let RentalListing { 
+            id, fraction, experience_nft, owner,
+            price: _, is_tkt_listing: _, start_timestamp_ms: _, end_timestamp_ms: _, is_rented: _
+        } = listing;
+
+        let nft_to_return = option::destroy_some(experience_nft);
         option::destroy_none(fraction);
 
-        // Se emite un evento para notificar al frontend.
         event::emit(NftReclaimed {
-            listing_id: object::id_from_uid(&id),
-            nft_id: object::id(&nft),
+            listing_id,
+            nft_id: object::id(&nft_to_return),
             owner,
         });
         
-        // Se transfiere el NFT de vuelta a su dueño original.
-        transfer::public_transfer(nft, owner);
-        // Se elimina el objeto de listado, que ya no es necesario.
+        transfer::public_transfer(nft_to_return, owner);
         object::delete(id);
     }
 
+    /// [Dueño] Reclama su Fracción una vez que el periodo de alquiler ha terminado.
     /// [Dueño] Reclama su Fracción una vez que el periodo de alquiler ha terminado.
     public entry fun reclaim_fraction(
         listing: RentalListing,
@@ -610,15 +612,23 @@ module tokentrip_rental_market::rental_market {
         let owner = tx_context::sender(ctx);
         assert!(owner == listing.owner, E_UNAUTHORIZED);
         
-        let RentalListing { id, fraction, owner, .. } = listing;
+        let listing_id = object::id(&listing);
+
+        let RentalListing { 
+            id, fraction, experience_nft, owner,
+            price: _, is_tkt_listing: _, start_timestamp_ms: _, end_timestamp_ms: _, is_rented: _
+        } = listing;
+
+        let fraction_to_return = option::destroy_some(fraction);
+        option::destroy_none(experience_nft);
 
         event::emit(FractionReclaimed {
-            listing_id: object::id_from_uid(&id),
-            fraction_id: object::id(&fraction),
+            listing_id,
+            fraction_id: object::id(&fraction_to_return),
             owner,
         });
         
-        transfer::public_transfer(fraction, owner);
+        transfer::public_transfer(fraction_to_return, owner);
         object::delete(id);
     }
 }

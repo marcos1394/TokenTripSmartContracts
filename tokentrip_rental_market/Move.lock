@@ -58,3 +58,16 @@ source = { local = "../tokentrip_token" }
 dependencies = [
   { id = "Sui", name = "Sui" },
 ]
+
+[move.toolchain-version]
+compiler-version = "1.52.2"
+edition = "2024.alpha"
+flavor = "sui"
+
+[env]
+
+[env.testnet]
+chain-id = "4c78adac"
+original-published-id = "0xab953deb05ed6d368839482e3c81615b2dc7d39af20dcef5301b39d64f3c99e0"
+latest-published-id = "0xab953deb05ed6d368839482e3c81615b2dc7d39af20dcef5301b39d64f3c99e0"
+published-version = "1"
