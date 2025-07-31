@@ -5,12 +5,16 @@ module tokentrip_lending_market::lending_market {
     use sui::transfer;
     use sui::event;
     use sui::clock::{Self, Clock};
-    use sui::coin::{Self, Coin};
+    use sui::coin::{Self, Coin, TreasuryCap};
+    use sui::sui::SUI;
+    use sui::balance::{Self, Balance};
+    use std::option::{Self, Option};
+    use tokentrip_experience::experience_nft::{Self, ExperienceNFT, Fraction, VipRegistry, is_vip};
+    use tokentrip_token::tkt::TKT;
+    use tokentrip_dao::dao::{Self, DAOTreasury};
+    use tokentrip_staking::staking::{Self, StakingPool};
+    use sui::table::{Self, Table};
 
-    // --- IMPORTACIONES DE OTROS MÓDULOS ---
-    use tokentrip_experiences::experience_nft::ExperienceNFT;
-    // Se importa el tipo de USDC del paquete de Wormhole
-    use wormhole_testnet::coin_registry::USDC;
 
     // --- CÓDIGOS DE ERROR ---
     const E_LOAN_NOT_DUE_YET: u64 = 1;
@@ -48,6 +52,7 @@ module tokentrip_lending_market::lending_market {
         fraction: Option<Fraction>,
         borrower: address,
         lender: address,
+        principal_amount: u64, // <-- AÑADE ESTA LÍNEA
         repayment_amount: u64,
         due_timestamp_ms: u64,
         is_tkt_loan: bool,
@@ -56,8 +61,8 @@ module tokentrip_lending_market::lending_market {
     // --- EVENTOS ---
     public struct LoanRequested has copy, drop { request_id: ID, borrower: address, asset_id: ID }
     public struct LoanRequestCancelled has copy, drop { request_id: ID, borrower: address }
-    public struct LoanFunded has copy, drop { request_id: ID, loan_id: ID, borrower: address, lender: address }
-    public struct LoanRepaid has copy, drop { loan_id: ID, borrower: address, lender: address }
+    public struct LoanFunded has copy, drop { request_id: ID, loan_id: ID, borrower: address, lender: address, principal: u64 }
+    public struct LoanRepaid has copy, drop { loan_id: ID, borrower: address, lender: address, repayment: u64 }
     public struct LoanLiquidated has copy, drop { loan_id: ID, lender: address, asset_id: ID }
 
 
@@ -90,18 +95,32 @@ module tokentrip_lending_market::lending_market {
         transfer::share_object(request);
     }
     
-    /// [PRESTATARIO] Cancela una solicitud de préstamo antes de que sea financiada.
+   /// [PRESTATARIO] Cancela una solicitud de préstamo antes de que sea financiada.
     public entry fun delist_loan_request(request: LoanRequest, ctx: &mut TxContext) {
         let sender = tx_context::sender(ctx);
         assert!(sender == request.borrower, E_UNAUTHORIZED);
         
         let request_id = object::id(&request);
-        let LoanRequest { id, nft, fraction, borrower, .. } = request;
-        
+
+        // --- CORRECCIÓN: Desestructuración explícita de TODOS los campos ---
+        let LoanRequest {
+            id,
+            nft,
+            fraction,
+            borrower,
+            principal_amount: _, // Se ignoran los campos no utilizados con '_'
+            repayment_amount: _,
+            duration_ms: _,
+            is_tkt_loan: _
+        } = request;
+
+        // Lógica para devolver el activo correcto
         if (option::is_some(&nft)) {
             transfer::public_transfer(option::destroy_some(nft), borrower);
+            option::destroy_none(fraction); // Se destruye el Option<Fraction> que estaba vacío
         } else {
             transfer::public_transfer(option::destroy_some(fraction), borrower);
+            option::destroy_none(nft); // Se destruye el Option<ExperienceNFT> que estaba vacío
         };
 
         event::emit(LoanRequestCancelled { request_id, borrower });
@@ -129,7 +148,7 @@ module tokentrip_lending_market::lending_market {
         let mut repayment_balance = coin::into_balance(repayment);
 
         if (interest_earned > 0) {
-            let fee_rate = if (table::contains(&vip_registry.vips, loan.lender)) { LENDER_VIP_FEE_BASIS_POINTS } else { LENDER_FEE_BASIS_POINTS };
+            let fee_rate = if (experience_nft::is_vip(vip_registry, loan.lender)) { LENDER_VIP_FEE_BASIS_POINTS } else { LENDER_FEE_BASIS_POINTS };
             let platform_fee = (interest_earned * fee_rate) / 10000;
             if (platform_fee > 0) {
                 let fee_balance = balance::split(&mut repayment_balance, platform_fee);
@@ -146,7 +165,7 @@ module tokentrip_lending_market::lending_market {
         let mut repayment_balance = coin::into_balance(repayment);
 
         if (interest_earned > 0) {
-            let fee_rate = if (table::contains(&vip_registry.vips, loan.lender)) { LENDER_VIP_FEE_BASIS_POINTS } else { LENDER_FEE_BASIS_POINTS };
+            let fee_rate = if (experience_nft::is_vip(vip_registry, loan.lender)) { LENDER_VIP_FEE_BASIS_POINTS } else { LENDER_FEE_BASIS_POINTS };
             let platform_fee = (interest_earned * fee_rate) / 10000;
             if (platform_fee > 0) {
                 let mut fee_balance = balance::split(&mut repayment_balance, platform_fee);

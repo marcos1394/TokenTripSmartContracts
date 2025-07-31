@@ -7,13 +7,9 @@ edition = "2024.alpha"
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "testnet" }
 tokentrip_experiences = { local = "../tokentrip_experiences" }
 
-# Dependencia para el token USDC de Wormhole en Testnet
-wormhole = { git = "https://github.com/wormhole-foundation/wormhole.git", subdir = "sui/wormhole", rev = "sui-testnet" }
-
-
 [addresses]
 tokentrip_lending_market = "0x0"
-tokentrip_experiences = "0x0"
+tokentrip_experience = "0x45ff0a4fc7daee05c6e7a3bdb1c92daafb722c861d2627900a039940300d7ed3"
+tokentrip_token = "0xed46584d450fc173a7796cdbc934248df25f0d46700a3a852fb025f1d9a000b3"
+tokentrip_dao = "0xfa1a5a8c8f307f3bac14acd7b182ffef7fa5c28fc7fa905877127944e0339448"
 
-# Dirección del paquete de Wormhole en Testnet
-wormhole_testnet = "0x1e42e56877869b823e5b1f32a0c7c34d08405d41b51e18c5e62f4007f7943a59"
