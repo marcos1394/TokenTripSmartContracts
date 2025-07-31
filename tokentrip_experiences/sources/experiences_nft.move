@@ -173,6 +173,16 @@ module tokentrip_experience::experience_nft {
         table::contains(&registry.vips, addr)
     }
 
+    /// Devuelve el nombre del NFT padre de una Fracción.
+    public fun fraction_parent_name(fraction: &Fraction): StdString {
+        fraction.parent_name
+    }
+
+    /// Devuelve la URL de la imagen del NFT padre de una Fracción.
+    public fun fraction_parent_image_url(fraction: &Fraction): SuiUrl {
+        fraction.parent_image_url
+    }
+
     public struct NftMinted has copy, drop {
         object_id: ID, 
         provider_id: ID,

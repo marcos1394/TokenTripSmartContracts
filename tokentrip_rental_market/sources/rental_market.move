@@ -17,10 +17,12 @@ module tokentrip_rental_market::rental_market {
         ExperienceNFT, 
         Fraction, 
         VipRegistry, 
-        expiration_timestamp_ms
+        expiration_timestamp_ms,
+        fraction_parent_name, fraction_parent_image_url
     };
     use tokentrip_staking::staking::{StakingPool, deposit_rewards};
     use tokentrip_dao::dao::{DAOTreasury, deposit_to_treasury};
+
     
 
     // --- CÓDIGOS DE ERROR ---
@@ -55,7 +57,7 @@ module tokentrip_rental_market::rental_market {
 
     /// Un "ticket" intransferible que prueba el derecho de uso de una Fracción
     /// durante un periodo de tiempo.
-    public struct RentalReceipt has key {
+    public struct RentalReceipt has key, store {
         id: UID,
         /// La dirección del inquilino.
         renter: address,
@@ -95,8 +97,9 @@ module tokentrip_rental_market::rental_market {
     }
 
     public struct FractionDelisted has copy, drop {
-        listing_id: ID,
-        owner: address,
+        listing_id: ID, 
+        fraction_id: ID, 
+        owner: address
     }
 
     public struct NftDelisted has copy, drop {
@@ -263,6 +266,7 @@ module tokentrip_rental_market::rental_market {
     }
 
 /// [Dueño] Cancela un listado de alquiler y reclama su Fracción, si no ha sido alquilada.
+    /// [Dueño] Cancela un listado de alquiler y reclama su Fracción, si no ha sido alquilada.
     public entry fun delist_fraction(
         listing: RentalListing,
         ctx: &mut TxContext
@@ -271,14 +275,35 @@ module tokentrip_rental_market::rental_market {
         assert!(sender == listing.owner, E_UNAUTHORIZED);
         assert!(!listing.is_rented, E_ALREADY_RENTED);
         
-        let RentalListing { id, fraction, owner, .. } = listing;
+        // 1. Se obtiene el ID del listado ANTES de desestructurar.
+        let listing_id = object::id(&listing);
 
+        // 2. Se desestructuran TODOS los campos explícitamente.
+        let RentalListing { 
+            id, 
+            fraction, // Esto es un Option<Fraction>
+            experience_nft, // Esto es un Option<ExperienceNFT>
+            owner,
+            price: _, is_tkt_listing: _, start_timestamp_ms: _, end_timestamp_ms: _, is_rented: _
+        } = listing;
+        
+        // 3. Se "desempaca" el Option para obtener la Fracción.
+        let fraction_to_return = option::destroy_some(fraction);
+        let fraction_id = object::id(&fraction_to_return);
+
+        // Se destruye el Option del NFT que estaba vacío para no dejarlo huérfano.
+        option::destroy_none(experience_nft);
+
+        // Se emite el evento con todos sus campos.
         event::emit(FractionDelisted {
-            listing_id: object::id_from_uid(&id),
+            listing_id,
+            fraction_id,
             owner,
         });
         
-        transfer::public_transfer(fraction, owner);
+        // Se transfiere la Fracción (no el Option) de vuelta a su dueño.
+        transfer::public_transfer(fraction_to_return, owner);
+        // Se elimina el objeto de listado.
         object::delete(id);
     }
 
@@ -304,7 +329,7 @@ module tokentrip_rental_market::rental_market {
 
         // --- 2. Lógica de Comisiones para SUI ---
         let mut payment_balance = coin::into_balance(payment);
-        let fee_rate = if (table::contains(&vip_registry.vips, listing.owner)) { VIP_FEE_BASIS_POINTS } else { PLATFORM_FEE_BASIS_POINTS };
+        let fee_rate = if (experience_nft::is_vip(&vip_registry, listing.owner)) { VIP_FEE_BASIS_POINTS } else { PLATFORM_FEE_BASIS_POINTS };
         let fee_amount = (price * fee_rate) / 10000;
         
         if (fee_amount > 0) {
