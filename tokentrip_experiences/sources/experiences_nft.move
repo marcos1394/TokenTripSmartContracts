@@ -163,6 +163,16 @@ module tokentrip_experience::experience_nft {
         owner: address
     }
 
+    /// Devuelve el timestamp de expiración de un ExperienceNFT.
+    public fun expiration_timestamp_ms(nft: &ExperienceNFT): u64 {
+        nft.expiration_timestamp_ms
+    }
+
+    /// Devuelve `true` si una dirección está en el registro VIP.
+    public fun is_vip(registry: &VipRegistry, addr: address): bool {
+        table::contains(&registry.vips, addr)
+    }
+
     public struct NftMinted has copy, drop {
         object_id: ID, 
         provider_id: ID,
@@ -293,7 +303,7 @@ module tokentrip_experience::experience_nft {
     ) {
         // Se obtiene una referencia mutable al vector de reglas
         let rules = &mut nft.evolution_rules;
-        let i = 0;
+        let mut i = 0;
         let len = vector::length(rules);
 
         let current_time = clock::timestamp_ms(clock);
@@ -305,7 +315,7 @@ module tokentrip_experience::experience_nft {
             // Solo se procesan las reglas que no han sido activadas antes
             if (!rule.is_triggered) {
                 
-                let should_trigger = false;
+                let mut should_trigger = false;
 
                 // Caso 1: Disparador por TIEMPO
                 if (rule.trigger_type == 0) { 
@@ -648,13 +658,16 @@ module tokentrip_experience::experience_nft {
         // Verificación clave: El revendedor NO debe ser el proveedor original.
         assert!(sender != nft.provider_address, E_UNAUTHORIZED);
 
+        let provider_id = nft.provider_id;
+
+
         let listing = Listing {
             id: object::new(ctx), 
             nft, 
             price: price_in_mist, 
             is_available: true,
             seller: sender, 
-            provider_id: nft.provider_id,
+            provider_id: provider_id,
             is_tkt_listing: false
         };
 
@@ -680,6 +693,9 @@ module tokentrip_experience::experience_nft {
         let sender = tx_context::sender(ctx);
         // Verificación clave: El revendedor NO debe ser el proveedor original.
         assert!(sender != nft.provider_address, E_UNAUTHORIZED);
+        
+        let provider_id = nft.provider_id;
+
 
         let listing = Listing {
             id: object::new(ctx), 
@@ -687,7 +703,7 @@ module tokentrip_experience::experience_nft {
             price: price_in_tkt_mist, 
             is_available: true,
             seller: sender, 
-            provider_id: nft.provider_id,
+            provider_id: provider_id,
             is_tkt_listing: true
         };
         

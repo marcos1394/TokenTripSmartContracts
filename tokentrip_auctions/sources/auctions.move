@@ -9,7 +9,7 @@ module tokentrip_auctions::auctions {
     use std::option::{Self, Option};
     use std::type_name;
     use sui::balance::{Self, Balance};
-    use tokentrip_experiences::experience_nft::{ExperienceNFT, RoyaltyConfig, royalties, royalty_recipient, royalty_basis_points};
+    use tokentrip_experience::experience_nft::{Self, ExperienceNFT};
     use tokentrip_dao::dao::{DAOTreasury, deposit_to_treasury};
     use tokentrip_token::tkt::TKT;
     use sui::coin::{TreasuryCap as TktTreasuryCap}; // Se importa de 'sui::coin' y se le da un alias
@@ -54,10 +54,9 @@ public entry fun create_auction(
     ctx: &mut TxContext 
     ) {
  // --- AÑADIDO: Verificación de Expiración ---
-        assert!(
-            nft.expiration_timestamp_ms == 0 || clock::timestamp_ms(clock) < nft.expiration_timestamp_ms,
-            E_AUCTION_HAS_ENDED // O un error E_TICKET_EXPIRED
-        );
+        
+        assert!(experience_nft::expiration_timestamp_ms(&nft) == 0 || clock::timestamp_ms(clock) < experience_nft::expiration_timestamp_ms(&nft), E_AUCTION_HAS_ENDED);
+
         let sender = tx_context::sender(ctx);
         let start_time = clock::timestamp_ms(clock);
         let end_time = start_time + duration_ms; // <-- ESTA LÍNEA DEBE ESTAR AQUÍ
@@ -95,7 +94,7 @@ public entry fun create_auction(
                 ) {
                      // --- AÑADIDO: Verificación de Expiración ---
         assert!(
-            nft.expiration_timestamp_ms == 0 || clock::timestamp_ms(clock) < nft.expiration_timestamp_ms,
+            experience_nft::expiration_timestamp_ms(&nft) == 0 || clock::timestamp_ms(clock) < experience_nft::expiration_timestamp_ms(&nft),
             E_AUCTION_HAS_ENDED // O un error E_TICKET_EXPIRED
         );
                     let sender = tx_context::sender(ctx);
@@ -208,11 +207,11 @@ public entry fun create_auction(
         // Si la subasta es exitosa
         let winner = option::destroy_some(highest_bidder);
         let mut payment_balance = bid_vault;
-        let royalty_config = royalties(&nft_to_transfer);
-        let royalty_amount = (highest_bid * (royalty_basis_points(royalty_config) as u64)) / 10000;
+        let royalty_config = experience_nft::royalties(&nft_to_transfer);
+        let royalty_amount = (highest_bid * (experience_nft::royalty_basis_points(royalty_config) as u64)) / 10000;
         if (royalty_amount > 0) {
             let royalty_payment = coin::from_balance(balance::split(&mut payment_balance, royalty_amount), ctx);
-            transfer::public_transfer(royalty_payment, royalty_recipient(royalty_config));
+            transfer::public_transfer(royalty_payment, experience_nft::royalty_recipient(royalty_config));
         };
         transfer::public_transfer(coin::from_balance(payment_balance, ctx), seller);
         transfer::public_transfer(nft_to_transfer, winner);
@@ -248,11 +247,11 @@ public entry fun create_auction(
         };
         let winner = option::destroy_some(highest_bidder);
         let mut payment_balance = tkt_bid_vault;
-        let royalty_config = royalties(&nft_to_transfer);
-        let royalty_amount = (highest_bid * (royalty_basis_points(royalty_config) as u64)) / 10000;
+        let royalty_config = experience_nft::royalties(&nft_to_transfer);
+        let royalty_amount = (highest_bid * (experience_nft::royalty_basis_points(royalty_config) as u64)) / 10000;
         if (royalty_amount > 0) {
             let royalty_payment = coin::from_balance(balance::split(&mut payment_balance, royalty_amount), ctx);
-            transfer::public_transfer(royalty_payment, royalty_recipient(royalty_config));
+            transfer::public_transfer(royalty_payment, experience_nft::royalty_recipient(royalty_config));
         };
         let fee_amount = (highest_bid * PLATFORM_FEE_BASIS_POINTS) / 10000;
         if (fee_amount > 0) {

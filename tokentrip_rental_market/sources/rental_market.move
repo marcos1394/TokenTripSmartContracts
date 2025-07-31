@@ -1,19 +1,27 @@
 module tokentrip_rental_market::rental_market {
     // --- DEPENDENCIAS ---
     use sui::object::{Self, ID, UID};
+    use sui::table::{Self, Table};
     use sui::tx_context::{Self, TxContext};
     use sui::transfer;
     use sui::event;
     use sui::clock::{Self, Clock};
-    use sui::coin::{Self, Coin};
+    use sui::coin::{Self, Coin, TreasuryCap};
     use sui::sui::SUI;
     use sui::balance::{Self, Balance};
     use std::string::{String as StdString};
     use sui::url::{Url as SuiUrl};
+    use tokentrip_token::tkt::TKT;
+    use tokentrip_experience::experience_nft::{
+        Self, 
+        ExperienceNFT, 
+        Fraction, 
+        VipRegistry, 
+        expiration_timestamp_ms
+    };
+    use tokentrip_staking::staking::{StakingPool, deposit_rewards};
+    use tokentrip_dao::dao::{DAOTreasury, deposit_to_treasury};
     
-    use tokentrip_experiences::experience_nft::{self, ExperienceNFT, VipRegistry};
-    use tokentrip_staking::staking::{self, StakingPool};
-    use tokentrip_dao::dao::{self, DAOTreasury};
 
     // --- CÓDIGOS DE ERROR ---
     const E_ALREADY_RENTED: u64 = 1;
@@ -188,7 +196,7 @@ module tokentrip_rental_market::rental_market {
         ctx: &mut TxContext
     ) {
         assert!(
-            nft.expiration_timestamp_ms == 0 || clock::timestamp_ms(clock) < nft.expiration_timestamp_ms,
+            experience_nft::expiration_timestamp_ms(&nft) == 0 || clock::timestamp_ms(clock) < experience_nft::expiration_timestamp_ms(&nft),
             E_UNAUTHORIZED
         );
 
@@ -226,7 +234,7 @@ module tokentrip_rental_market::rental_market {
         ctx: &mut TxContext
     ) {
         assert!(
-            nft.expiration_timestamp_ms == 0 || clock::timestamp_ms(clock) < nft.expiration_timestamp_ms,
+            experience_nft::expiration_timestamp_ms(&nft) == 0 || clock::timestamp_ms(clock) < experience_nft::expiration_timestamp_ms(&nft),
             E_UNAUTHORIZED
         );
 
