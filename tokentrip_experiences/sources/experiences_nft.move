@@ -13,7 +13,9 @@ module tokentrip_experience::experience_nft {
     use sui::clock::{Self, Clock};
     use std::vector;
     use std::bcs;
-    
+    use sui::display::{Self, Display};
+    use sui::package::{Self, Publisher};
+
     // --- IMPORTACIONES DE NUESTROS OTROS MÓDULOS ---
     use tokentrip_token::tkt::TKT;
     use tokentrip_dao::dao::{DAOTreasury, deposit_to_treasury};
@@ -35,7 +37,9 @@ module tokentrip_experience::experience_nft {
     const ROYALTY_FEE_BASIS_POINTS: u16 = 250; // 2.50% - CORREGIDO a u16
 
     // --- STRUCTS ---
-    // --- STRUCTS ---
+
+    // AÑADE ESTA LÍNEA AL PRINCIPIO DE TUS STRUCTS
+    public struct EXPERIENCE_NFT has drop {}
 
     public struct AdminCap has key, store { 
         id: UID 
@@ -238,12 +242,38 @@ module tokentrip_experience::experience_nft {
 
 
 
-    // --- FUNCIÓN DE INICIALIZACIÓN ---
-    fun init(ctx: &mut TxContext) {
-        let sender = tx_context::sender(ctx);
-        transfer::transfer(AdminCap { id: object::new(ctx) }, sender);
-        transfer::share_object(VipRegistry {id: object::new(ctx), vips: table::new(ctx)});
-    }
+    // --- FUNCIÓN DE INICIALIZACIÓN (VERSIÓN FINAL, AHORA SÍ) ---
+fun init(witness: EXPERIENCE_NFT, ctx: &mut TxContext) { // <-- CORRECCIÓN AQUÍ
+    let sender = tx_context::sender(ctx);
+
+    // --- Tu lógica original (se mantiene igual) ---
+    transfer::transfer(AdminCap { id: object::new(ctx) }, sender);
+    transfer::share_object(VipRegistry {id: object::new(ctx), vips: table::new(ctx)});
+
+    // --- LÓGICA DEL DISPLAY (YA ESTABA CORRECTA) ---
+    let publisher = package::claim(witness, ctx);
+    let mut display = display::new<ExperienceNFT>(&publisher, ctx);
+
+    display::add_multiple(
+        &mut display,
+        // Vector de Claves (Keys)
+        vector[
+            utf8(b"name"), utf8(b"description"), utf8(b"image_url"),
+            utf8(b"project_name"), utf8(b"project_url"), utf8(b"collection"),
+            utf8(b"event"), utf8(b"city"), utf8(b"tier")
+        ],
+        // Vector de Valores (Values)
+        vector[
+            utf8(b"{name}"), utf8(b"{description}"), utf8(b"{image_url}"),
+            utf8(b"TokenTrip"), utf8(b"https://tokentrip.com"),
+            utf8(b"{collection_name}"), utf8(b"{event_name}"),
+            utf8(b"{event_city}"), utf8(b"{tier}")
+        ]
+    );
+    
+    transfer::public_transfer(publisher, sender);
+    transfer::public_transfer(display, sender);
+}
 
     // --- FUNCIONES DE GESTIÓN ---
 
