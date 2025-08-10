@@ -9,7 +9,7 @@ tokentrip_experiences = { local = "../tokentrip_experiences" }
 
 [addresses]
 tokentrip_lending_market = "0x0"
-tokentrip_experience = "0x73d33c77d5c230f61ec285651d434c2950c79026a25a89b674f9e4239e51e239"
+tokentrip_experience = "0xcea6a3334cb989a2a7462c1fc22a43f87484bde7e51c6acf4a7e72ac1da04368"
 tokentrip_token = "0xed46584d450fc173a7796cdbc934248df25f0d46700a3a852fb025f1d9a000b3"
 tokentrip_dao = "0xfa1a5a8c8f307f3bac14acd7b182ffef7fa5c28fc7fa905877127944e0339448"
 

@@ -243,51 +243,31 @@ use sui::url::{Self as url, Url as SuiUrl, new_unsafe_from_bytes};
 
 
 
-    // --- FUNCIÓN DE INICIALIZACIÓN (VERSIÓN DEFINITIVA) ---
+    // Usa esta función init SIMPLIFICADA para la prueba final
 fun init(witness: EXPERIENCE_NFT, ctx: &mut TxContext) {
     let sender = tx_context::sender(ctx);
 
-    // --- Lógica original que ya tenías ---
     transfer::transfer(AdminCap { id: object::new(ctx) }, sender);
     transfer::share_object(VipRegistry {id: object::new(ctx), vips: table::new(ctx)});
 
-
-    // --- Lógica del Display ---
-
-    // 1. Reclama el objeto "Publisher" para este paquete.
     let publisher = package::claim(witness, ctx);
-    
-    // 2. Crea el objeto Display (mutable para poder agregarle campos).
     let mut display = display::new<ExperienceNFT>(&publisher, ctx);
 
-    // 3. Agrega los campos que quieres que sean visibles.
+    // --- DISPLAY DE PRUEBA: Solo con campos de texto simples ---
     display::add_multiple(
         &mut display,
-        // Vector de Claves (Keys) - Las etiquetas que se mostrarán en UIs
+        // Vector de Claves
         vector[
             utf8(b"name"),
-            utf8(b"description"),
-            utf8(b"image_url"),
-            utf8(b"collection"),
-            utf8(b"event"),
-            utf8(b"tier"),
-            utf8(b"project_name"),
-            utf8(b"project_url")
+            utf8(b"description")
         ],
-        // Vector de Valores (Values) - Las plantillas que apuntan a los campos del NFT
+        // Vector de Valores (Plantillas)
         vector[
             utf8(b"{name}"),
-            utf8(b"{description}"),
-            utf8(b"{image_url}"),
-            utf8(b"{collection_name}"),
-            utf8(b"{event_name}"),
-            utf8(b"{tier}"),
-            utf8(b"TokenTrip"), // Valor fijo
-            utf8(b"https://tokentrip.com") // Valor fijo
+            utf8(b"{description}")
         ]
     );
     
-    // 4. Haz públicos el Publisher y el Display para que el ecosistema pueda usarlos.
     transfer::public_transfer(publisher, sender);
     transfer::public_transfer(display, sender);
 }
