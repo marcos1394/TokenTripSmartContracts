@@ -267,7 +267,7 @@ public fun collection_name(nft: &ExperienceNFT): &StdString {
         provider_id: ID
     }
 
-    // Función init final y completa
+    // Función init final y completa con update_version
 fun init(witness: EXPERIENCE_NFT, ctx: &mut TxContext) {
     let sender = tx_context::sender(ctx);
 
@@ -277,6 +277,7 @@ fun init(witness: EXPERIENCE_NFT, ctx: &mut TxContext) {
     let publisher = package::claim(witness, ctx);
     let mut display = display::new<ExperienceNFT>(&publisher, ctx);
 
+    // Añadimos los campos como antes
     display::add_multiple(
         &mut display,
         vector[
@@ -301,6 +302,11 @@ fun init(witness: EXPERIENCE_NFT, ctx: &mut TxContext) {
         ]
     );
     
+    // --- EL PASO CRUCIAL QUE FALTABA ---
+    // Confirmamos y emitimos el evento del Display para que el indexador lo reconozca.
+    display::update_version(&mut display);
+    
+    // Transferimos los objetos como antes
     transfer::public_transfer(publisher, sender);
     transfer::public_transfer(display, sender);
 }
