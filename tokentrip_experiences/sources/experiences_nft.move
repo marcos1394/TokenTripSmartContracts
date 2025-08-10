@@ -173,6 +173,32 @@ use sui::url::{Self as url, Url as SuiUrl, new_unsafe_from_bytes};
         nft.expiration_timestamp_ms
     }
 
+    // --- GETTERS PÚBLICOS PARA EL DISPLAY ---
+// Estas funciones le dan permiso al Indexador de Sui para leer los campos del NFT.
+    
+
+public fun description(nft: &ExperienceNFT): &StdString {
+    &nft.description
+}
+
+
+
+public fun event_name(nft: &ExperienceNFT): &StdString {
+    &nft.event_name
+}
+
+public fun event_city(nft: &ExperienceNFT): &StdString {
+    &nft.event_city
+}
+
+public fun tier(nft: &ExperienceNFT): &StdString {
+    &nft.tier
+}
+
+public fun collection_name(nft: &ExperienceNFT): &StdString {
+    &nft.collection_name
+}
+
     /// Devuelve `true` si una dirección está en el registro VIP.
     public fun is_vip(registry: &VipRegistry, addr: address): bool {
         table::contains(&registry.vips, addr)
@@ -241,9 +267,7 @@ use sui::url::{Self as url, Url as SuiUrl, new_unsafe_from_bytes};
         provider_id: ID
     }
 
-
-
-    // Usa esta función init SIMPLIFICADA para la prueba final
+    // Función init final y completa
 fun init(witness: EXPERIENCE_NFT, ctx: &mut TxContext) {
     let sender = tx_context::sender(ctx);
 
@@ -253,18 +277,27 @@ fun init(witness: EXPERIENCE_NFT, ctx: &mut TxContext) {
     let publisher = package::claim(witness, ctx);
     let mut display = display::new<ExperienceNFT>(&publisher, ctx);
 
-    // --- DISPLAY DE PRUEBA: Solo con campos de texto simples ---
     display::add_multiple(
         &mut display,
-        // Vector de Claves
         vector[
             utf8(b"name"),
-            utf8(b"description")
+            utf8(b"description"),
+            utf8(b"image_url"),
+            utf8(b"collection"),
+            utf8(b"event"),
+            utf8(b"tier"),
+            utf8(b"project_name"),
+            utf8(b"project_url")
         ],
-        // Vector de Valores (Plantillas)
         vector[
             utf8(b"{name}"),
-            utf8(b"{description}")
+            utf8(b"{description}"),
+            utf8(b"{image_url}"),
+            utf8(b"{collection_name}"),
+            utf8(b"{event_name}"),
+            utf8(b"{tier}"),
+            utf8(b"TokenTrip"),
+            utf8(b"https://tokentrip.com")
         ]
     );
     
@@ -272,6 +305,7 @@ fun init(witness: EXPERIENCE_NFT, ctx: &mut TxContext) {
     transfer::public_transfer(display, sender);
 }
 
+    
     // --- FUNCIONES DE GESTIÓN ---
 
     public entry fun add_vip(
