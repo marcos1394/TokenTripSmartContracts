@@ -4,8 +4,9 @@ module tokentrip_experience::experience_nft {
     use sui::tx_context::{Self, TxContext};
     use sui::transfer;
     use sui::event;
-    use std::string::{String as StdString, utf8};
-    use sui::url::{Url as SuiUrl, new_unsafe_from_bytes};
+    // PON ESTAS LÍNEAS AL PRINCIPIO DE TU ARCHIVO CON LAS OTRAS IMPORTACIONES
+use std::string::{Self as string, String as StdString, utf8};
+use sui::url::{Self as url, Url as SuiUrl, new_unsafe_from_bytes};
     use sui::coin::{Self, Coin, burn, TreasuryCap};
     use sui::sui::SUI;
     use sui::balance::{Self, Balance};
@@ -439,110 +440,105 @@ fun init(witness: EXPERIENCE_NFT, ctx: &mut TxContext) {
         });
     }
 
-    /// recibiendo los atributos y reglas como vectores paralelos de datos primitivos.
     public entry fun provider_mint_experience(
-        provider_profile: &ProviderProfile,
-        name_bytes: vector<u8>, 
-        description_bytes: vector<u8>,
-        image_url_bytes: vector<u8>, 
-        event_name_bytes: vector<u8>, 
-        event_city_bytes: vector<u8>,
-        validity_details_bytes: vector<u8>, 
-        experience_type_bytes: vector<u8>,
-        tier_bytes: vector<u8>, 
-        serial_number: u64, 
-        collection_name_bytes: vector<u8>,
-        
-        // Atributos como vectores paralelos
-        attribute_keys: vector<vector<u8>>,
-        attribute_values: vector<vector<u8>>,
-        
-        // Opciones de comportamiento
-        is_redeemable: bool,
-        expiration_timestamp_ms: u64,
+    provider_profile: &ProviderProfile,
+    name: StdString,
+    description: StdString,
+    image_url: StdString,
+    event_name: StdString,
+    event_city: StdString,
+    validity_details: StdString,
+    experience_type: StdString,
+    tier: StdString,
+    serial_number: u64,
+    collection_name: StdString,
+    
+    attribute_keys: vector<StdString>,
+    attribute_values: vector<StdString>,
+    
+    is_redeemable: bool,
+    expiration_timestamp_ms: u64,
 
-        // Reglas de evolución como vectores paralelos
-        rule_trigger_types: vector<u8>,
-        rule_trigger_values: vector<u64>,
-        rule_new_image_urls: vector<vector<u8>>,
-        rule_new_descriptions: vector<vector<u8>>,
-        
-        ctx: &mut TxContext
-    ) {
-        // 1. Verificación de autorización
-        assert!(tx_context::sender(ctx) == provider_profile.owner, E_UNAUTHORIZED);
+    rule_trigger_types: vector<u8>,
+    rule_trigger_values: vector<u64>,
+    rule_new_image_urls: vector<StdString>,
+    rule_new_descriptions: vector<StdString>,
+    
+    ctx: &mut TxContext
+) {
+    // 1. Verificación de autorización
+    assert!(tx_context::sender(ctx) == provider_profile.owner, E_UNAUTHORIZED);
 
-        // 2. Reconstruir el vector<Attribute>
-        let mut attributes = vector::empty<Attribute>();
-        let mut i = 0;
-        let attr_len = vector::length(&attribute_keys);
-        assert!(vector::length(&attribute_values) == attr_len, E_INVALID_ARGUMENT); // Asegura consistencia
-        
-        while (i < attr_len) {
-            let key = utf8(*vector::borrow(&attribute_keys, i));
-            let value = utf8(*vector::borrow(&attribute_values, i));
-            vector::push_back(&mut attributes, Attribute { key, value });
-            i = i + 1;
-        };
-
-        // 3. Reconstruir el vector<EvolutionRule>
-        let mut evolution_rules = vector::empty<EvolutionRule>();
-        let mut j = 0;
-        let rules_len = vector::length(&rule_trigger_types);
-        // (Aquí irían más asserts para validar la consistencia de todos los vectores de reglas)
-
-        while (j < rules_len) {
-            vector::push_back(&mut evolution_rules, EvolutionRule {
-                trigger_type: *vector::borrow(&rule_trigger_types, j),
-                trigger_value: *vector::borrow(&rule_trigger_values, j),
-                new_image_url: new_unsafe_from_bytes(*vector::borrow(&rule_new_image_urls, j)),
-                new_description: utf8(*vector::borrow(&rule_new_descriptions, j)),
-                attributes_to_add: vector::empty(), // Simplificado por ahora
-                is_triggered: false,
-            });
-            j = j + 1;
-        };
-
-        // 4. Crear el struct del NFT
-        let nft = ExperienceNFT {
-            id: object::new(ctx),
-            name: utf8(name_bytes),
-            description: utf8(description_bytes),
-            image_url: new_unsafe_from_bytes(image_url_bytes),
-            event_name: utf8(event_name_bytes),
-            event_city: utf8(event_city_bytes),
-            validity_details: utf8(validity_details_bytes),
-            experience_type: utf8(experience_type_bytes),
-            issuer_name: utf8(b"TokenTrip"),
-            tier: utf8(tier_bytes),
-            serial_number: serial_number,
-            attributes: attributes,
-            collection_name: utf8(collection_name_bytes),
-            royalties: RoyaltyConfig {
-                recipient: provider_profile.owner,
-                basis_points: ROYALTY_FEE_BASIS_POINTS
-            },
-            provider_id: object::id(provider_profile),
-            provider_address: provider_profile.owner,
-            is_redeemable: is_redeemable,
-            expiration_timestamp_ms: expiration_timestamp_ms,
-            evolution_rules: evolution_rules,
-        };
-        
-        let nft_id = object::id(&nft);
-        let nft_name = nft.name;
-        
-        // 5. Emitir el evento
-        event::emit(NftMinted {
-            object_id: nft_id,
-            provider_id: object::id(provider_profile),
-            name: nft_name,
-            minter: provider_profile.owner
+    // 2. Reconstruir el vector<Attribute>
+    let mut attributes = vector::empty<Attribute>();
+    let mut i = 0;
+    let attr_len = vector::length(&attribute_keys);
+    assert!(vector::length(&attribute_values) == attr_len, E_INVALID_ARGUMENT);
+    
+    while (i < attr_len) {
+        vector::push_back(&mut attributes, Attribute { 
+            key: *vector::borrow(&attribute_keys, i), 
+            value: *vector::borrow(&attribute_values, i) 
         });
+        i = i + 1;
+    };
 
-        // 6. Transferir el NFT al proveedor
-        transfer::public_transfer(nft, provider_profile.owner);
-    }
+    // 3. Reconstruir el vector<EvolutionRule>
+    let mut evolution_rules = vector::empty<EvolutionRule>();
+    let mut j = 0;
+    let rules_len = vector::length(&rule_trigger_types);
+
+    while (j < rules_len) {
+        vector::push_back(&mut evolution_rules, EvolutionRule {
+            trigger_type: *vector::borrow(&rule_trigger_types, j),
+            trigger_value: *vector::borrow(&rule_trigger_values, j),
+            // --- CORRECCIÓN FINAL AQUÍ ---
+            new_image_url: url::new_unsafe_from_bytes(*string::bytes(vector::borrow(&rule_new_image_urls, j))),
+            new_description: *vector::borrow(&rule_new_descriptions, j),
+            attributes_to_add: vector::empty(),
+            is_triggered: false,
+        });
+        j = j + 1;
+    };
+
+    // 4. Crear el struct del NFT
+    let nft = ExperienceNFT {
+        id: object::new(ctx),
+        name: name,
+        description: description,
+        // --- CORRECCIÓN FINAL AQUÍ ---
+        image_url: url::new_unsafe_from_bytes(*string::bytes(&image_url)),
+        event_name: event_name,
+        event_city: event_city,
+        validity_details: validity_details,
+        experience_type: experience_type,
+        issuer_name: utf8(b"TokenTrip"),
+        tier: tier,
+        serial_number: serial_number,
+        attributes: attributes,
+        collection_name: collection_name,
+        royalties: RoyaltyConfig {
+            recipient: provider_profile.owner,
+            basis_points: ROYALTY_FEE_BASIS_POINTS
+        },
+        provider_id: object::id(provider_profile),
+        provider_address: provider_profile.owner,
+        is_redeemable: is_redeemable,
+        expiration_timestamp_ms: expiration_timestamp_ms,
+        evolution_rules: evolution_rules,
+    };
+    
+    // 5. Emitir el evento
+    event::emit(NftMinted {
+        object_id: object::id(&nft),
+        provider_id: object::id(provider_profile),
+        name: nft.name,
+        minter: provider_profile.owner
+    });
+
+    // 6. Transferir el NFT
+    transfer::public_transfer(nft, provider_profile.owner);
+}
 
 /// Permite a un usuario redimir un ExperienceNFT para recibir un ProofOfExperience (SBT).
     /// Esta acción consume (quema) el ExperienceNFT original.
