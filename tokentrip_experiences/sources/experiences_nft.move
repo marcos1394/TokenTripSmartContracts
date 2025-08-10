@@ -242,35 +242,51 @@ module tokentrip_experience::experience_nft {
 
 
 
-    // --- FUNCIÓN DE INICIALIZACIÓN (VERSIÓN FINAL, AHORA SÍ) ---
-fun init(witness: EXPERIENCE_NFT, ctx: &mut TxContext) { // <-- CORRECCIÓN AQUÍ
+    // --- FUNCIÓN DE INICIALIZACIÓN (VERSIÓN DEFINITIVA) ---
+fun init(witness: EXPERIENCE_NFT, ctx: &mut TxContext) {
     let sender = tx_context::sender(ctx);
 
-    // --- Tu lógica original (se mantiene igual) ---
+    // --- Lógica original que ya tenías ---
     transfer::transfer(AdminCap { id: object::new(ctx) }, sender);
     transfer::share_object(VipRegistry {id: object::new(ctx), vips: table::new(ctx)});
 
-    // --- LÓGICA DEL DISPLAY (YA ESTABA CORRECTA) ---
+
+    // --- Lógica del Display ---
+
+    // 1. Reclama el objeto "Publisher" para este paquete.
     let publisher = package::claim(witness, ctx);
+    
+    // 2. Crea el objeto Display (mutable para poder agregarle campos).
     let mut display = display::new<ExperienceNFT>(&publisher, ctx);
 
+    // 3. Agrega los campos que quieres que sean visibles.
     display::add_multiple(
         &mut display,
-        // Vector de Claves (Keys)
+        // Vector de Claves (Keys) - Las etiquetas que se mostrarán en UIs
         vector[
-            utf8(b"name"), utf8(b"description"), utf8(b"image_url"),
-            utf8(b"project_name"), utf8(b"project_url"), utf8(b"collection"),
-            utf8(b"event"), utf8(b"city"), utf8(b"tier")
+            utf8(b"name"),
+            utf8(b"description"),
+            utf8(b"image_url"),
+            utf8(b"collection"),
+            utf8(b"event"),
+            utf8(b"tier"),
+            utf8(b"project_name"),
+            utf8(b"project_url")
         ],
-        // Vector de Valores (Values)
+        // Vector de Valores (Values) - Las plantillas que apuntan a los campos del NFT
         vector[
-            utf8(b"{name}"), utf8(b"{description}"), utf8(b"{image_url}"),
-            utf8(b"TokenTrip"), utf8(b"https://tokentrip.com"),
-            utf8(b"{collection_name}"), utf8(b"{event_name}"),
-            utf8(b"{event_city}"), utf8(b"{tier}")
+            utf8(b"{name}"),
+            utf8(b"{description}"),
+            utf8(b"{image_url}"),
+            utf8(b"{collection_name}"),
+            utf8(b"{event_name}"),
+            utf8(b"{tier}"),
+            utf8(b"TokenTrip"), // Valor fijo
+            utf8(b"https://tokentrip.com") // Valor fijo
         ]
     );
     
+    // 4. Haz públicos el Publisher y el Display para que el ecosistema pueda usarlos.
     transfer::public_transfer(publisher, sender);
     transfer::public_transfer(display, sender);
 }
@@ -423,8 +439,6 @@ fun init(witness: EXPERIENCE_NFT, ctx: &mut TxContext) { // <-- CORRECCIÓN AQU�
         });
     }
 
-    /// Permite a un proveedor registrado crear (mintear) un nuevo NFT de experiencia.
-   /// Permite a un proveedor registrado crear un nuevo NFT de experiencia,
     /// recibiendo los atributos y reglas como vectores paralelos de datos primitivos.
     public entry fun provider_mint_experience(
         provider_profile: &ProviderProfile,
