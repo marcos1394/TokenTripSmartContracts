@@ -460,11 +460,12 @@ fun init(witness: EXPERIENCE_NFT, ctx: &mut TxContext) {
         });
     }
 
-    public entry fun provider_mint_experience(
+public entry fun provider_mint_experience(
     provider_profile: &ProviderProfile,
     name: StdString,
     description: StdString,
     image_url: StdString,
+    content_type: StdString, // <-- 1. NUEVO PARÁMETRO
     event_name: StdString,
     event_city: StdString,
     validity_details: StdString,
@@ -503,6 +504,12 @@ fun init(witness: EXPERIENCE_NFT, ctx: &mut TxContext) {
         i = i + 1;
     };
 
+    // --- 2. CAMBIO CLAVE: AÑADIR EL ATRIBUTO `content-type` DINÁMICAMENTE ---
+    vector::push_back(&mut attributes, Attribute {
+        key: string::utf8(b"content-type"),
+        value: content_type // Usamos el valor pasado desde el frontend
+    });
+
     // 3. Reconstruir el vector<EvolutionRule>
     let mut evolution_rules = vector::empty<EvolutionRule>();
     let mut j = 0;
@@ -512,7 +519,6 @@ fun init(witness: EXPERIENCE_NFT, ctx: &mut TxContext) {
         vector::push_back(&mut evolution_rules, EvolutionRule {
             trigger_type: *vector::borrow(&rule_trigger_types, j),
             trigger_value: *vector::borrow(&rule_trigger_values, j),
-            // --- CORRECCIÓN FINAL AQUÍ ---
             new_image_url: url::new_unsafe_from_bytes(*string::bytes(vector::borrow(&rule_new_image_urls, j))),
             new_description: *vector::borrow(&rule_new_descriptions, j),
             attributes_to_add: vector::empty(),
@@ -526,7 +532,6 @@ fun init(witness: EXPERIENCE_NFT, ctx: &mut TxContext) {
         id: object::new(ctx),
         name: name,
         description: description,
-        // --- CORRECCIÓN FINAL AQUÍ ---
         image_url: url::new_unsafe_from_bytes(*string::bytes(&image_url)),
         event_name: event_name,
         event_city: event_city,
