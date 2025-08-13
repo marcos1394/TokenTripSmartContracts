@@ -5,8 +5,8 @@ module tokentrip_experience::experience_nft {
     use sui::transfer;
     use sui::event;
     // PON ESTAS LÍNEAS AL PRINCIPIO DE TU ARCHIVO CON LAS OTRAS IMPORTACIONES
-use std::string::{Self as string, String as StdString, utf8};
-use sui::url::{Self as url, Url as SuiUrl, new_unsafe_from_bytes};
+    use std::string::{Self as string, String as StdString, utf8};
+    use sui::url::{Self as url, Url as SuiUrl, new_unsafe_from_bytes};
     use sui::coin::{Self, Coin, burn, TreasuryCap};
     use sui::sui::SUI;
     use sui::balance::{Self, Balance};
@@ -51,23 +51,27 @@ use sui::url::{Self as url, Url as SuiUrl, new_unsafe_from_bytes};
         vips: Table<address, bool>
     }
 
-    public struct ProviderProfile has key, store {
-        id: UID,
-        owner: address,
-        name: StdString,
-        bio: StdString,
-        image_url: SuiUrl,
-        category: StdString,
-        metadata: vector<Attribute>,
-        is_verified: bool,      // <-- AÑADIDO: Para la verificación por la DAO
-        tier: u8,               // <-- AÑADIDO: Para el sistema de reputación
-        total_reviews: u64,
-        total_rating_points: u64,
-    }
+    // En tu archivo experience_nft.move
+
+public struct ProviderProfile has key, store {
+    id: UID,
+    image_blob_object_id: ID, // <-- NUEVO CAMPO
+    owner: address,
+    name: StdString,
+    bio: StdString,
+    image_url: SuiUrl,
+    category: StdString,
+    metadata: vector<Attribute>,
+    is_verified: bool,
+    tier: u8,
+    total_reviews: u64,
+    total_rating_points: u64,
+}
 
     public struct EvolutionRule has store, drop, copy {
     trigger_type: u8, // 0 para Tiempo, 1 para Meta
     trigger_value: u64, // El timestamp o el valor de la meta
+    new_image_blob_object_id: ID, // <-- AÑADIR ESTE CAMPO
     new_image_url: SuiUrl,
     new_description: StdString,
     attributes_to_add: vector<Attribute>,
@@ -105,6 +109,7 @@ use sui::url::{Self as url, Url as SuiUrl, new_unsafe_from_bytes};
     public struct ExperienceNFT has key, store {
         id: UID, 
         name: StdString, 
+        image_blob_object_id: ID,
         description: StdString, 
         image_url: SuiUrl,
         event_name: StdString, 
@@ -148,6 +153,7 @@ use sui::url::{Self as url, Url as SuiUrl, new_unsafe_from_bytes};
     public struct Fraction has key, store {
         id: UID,
         parent_id: ID,
+        parent_image_blob_object_id: ID, // <-- AÑADIR ESTE CAMPO
         share: u64,
         parent_name: StdString,
         parent_image_url: SuiUrl,
@@ -342,94 +348,111 @@ fun init(witness: EXPERIENCE_NFT, ctx: &mut TxContext) {
         table::remove(&mut registry.vips, provider_address);
     }
 
-    public entry fun register_provider(
-        name_bytes: vector<u8>, 
-        bio_bytes: vector<u8>, 
-        image_url_bytes: vector<u8>,
-        category_bytes: vector<u8>,
-        ctx: &mut TxContext
-    ) {
-        let sender = tx_context::sender(ctx);
-        let profile = ProviderProfile {
-            id: object::new(ctx),
-            owner: sender, 
-            name: utf8(name_bytes), 
-            bio: utf8(bio_bytes),
-            image_url: new_unsafe_from_bytes(image_url_bytes),
-            category: utf8(category_bytes),
-            metadata: vector::empty(),
-            // --- Se inicializan los nuevos campos y se elimina active_listings ---
-            is_verified: false, // Los nuevos proveedores no están verificados por defecto
-            tier: 0,            // Todos empiezan en el nivel 0 (ej. Bronce)
-            total_reviews: 0,
-            total_rating_points: 0,
-        };
-        event::emit(ProviderRegistered { 
-            provider_id: object::id(&profile), 
-            owner: sender, 
-            name: profile.name 
-        });
-        transfer::public_transfer(profile, sender);
-    }
+    // En tu archivo experience_nft.move
 
-    public entry fun evolve_experience(
-        nft: &mut ExperienceNFT, 
-        provider_profile: &ProviderProfile, // Necesario para comprobar metas relacionadas con el proveedor
-        clock: &Clock, 
-        _ctx: &mut TxContext
-    ) {
-        // Se obtiene una referencia mutable al vector de reglas
-        let rules = &mut nft.evolution_rules;
-        let mut i = 0;
-        let len = vector::length(rules);
+public entry fun register_provider(
+    name: StdString,
+    bio: StdString,
+    image_url: StdString,
+    image_blob_object_id: ID, // <-- NUEVO PARÁMETRO
+    content_type: StdString,   // <-- NUEVO PARÁMETRO
+    category: StdString,
+    ctx: &mut TxContext
+) {
+    let sender = tx_context::sender(ctx);
 
-        let current_time = clock::timestamp_ms(clock);
+    // Creamos el vector de atributos para el perfil
+    let mut attributes = vector::empty<Attribute>();
 
-        // Se recorren todas las reglas para ver si alguna se puede activar
-        while (i < len) {
-            let rule = vector::borrow_mut(rules, i);
+    // Añadimos el atributo `content-type` para que el logo se muestre correctamente
+    vector::push_back(&mut attributes, Attribute {
+        key: string::utf8(b"content-type"),
+        value: content_type
+    });
+    
+    let profile = ProviderProfile {
+        id: object::new(ctx),
+        image_blob_object_id: image_blob_object_id, // <-- Se asigna el nuevo campo
+        owner: sender,
+        name,
+        bio,
+        image_url: url::new_unsafe_from_bytes(*string::bytes(&image_url)),
+        category,
+        metadata: attributes,
+        is_verified: false,
+        tier: 0,
+        total_reviews: 0,
+        total_rating_points: 0,
+    };
+    
+    event::emit(ProviderRegistered {
+        provider_id: object::id(&profile),
+        owner: sender,
+        name: profile.name
+    });
 
-            // Solo se procesan las reglas que no han sido activadas antes
-            if (!rule.is_triggered) {
-                
-                let mut should_trigger = false;
+    transfer::public_transfer(profile, sender);
+}
 
-                // Caso 1: Disparador por TIEMPO
-                if (rule.trigger_type == 0) { 
-                    if (current_time >= rule.trigger_value) {
-                        should_trigger = true;
-                    }
-                };
+public entry fun evolve_experience(
+    nft: &mut ExperienceNFT, 
+    provider_profile: &ProviderProfile,
+    clock: &Clock, 
+    _ctx: &mut TxContext
+) {
+    let rules = &mut nft.evolution_rules;
+    let mut i = 0;
+    let len = vector::length(rules);
 
-                // Caso 2: Disparador por META (ejemplo: N.º de reseñas del proveedor)
-                if (rule.trigger_type == 1) {
-                    if (provider_profile.total_reviews >= rule.trigger_value) {
-                        should_trigger = true;
-                    }
-                };
+    let current_time = clock::timestamp_ms(clock);
 
-                // Si alguna de las condiciones se cumplió, se aplica la evolución
-                if (should_trigger) {
-                    // Se actualizan los metadatos del NFT
-                    nft.image_url = rule.new_image_url;
-                    nft.description = rule.new_description;
-                    
-                    // Se añaden los nuevos atributos
-                    vector::append(&mut nft.attributes, rule.attributes_to_add);
-                    // Se marca la regla como activada para que no vuelva a usarse
-                    rule.is_triggered = true;
+    // Se recorren todas las reglas para ver si alguna se puede activar
+    while (i < len) {
+        let rule = vector::borrow_mut(rules, i);
+
+        // Solo se procesan las reglas que no han sido activadas antes
+        if (!rule.is_triggered) {
+            
+            let mut should_trigger = false;
+
+            // Caso 1: Disparador por TIEMPO
+            if (rule.trigger_type == 0) { 
+                if (current_time >= rule.trigger_value) {
+                    should_trigger = true;
+                }
+            }
+            // Caso 2: Disparador por META (ejemplo: N.º de reseñas del proveedor)
+            else if (rule.trigger_type == 1) {
+                if (provider_profile.total_reviews >= rule.trigger_value) {
+                    should_trigger = true;
                 }
             };
-            i = i + 1;
-        };
 
-        // Se emite un evento para notificar al mundo exterior del cambio
-        event::emit(NftEvolved {
-            nft_id: object::id(nft),
-            new_image_url: nft.image_url,
-            new_description: nft.description,
-        });
-    }
+            // Si alguna de las condiciones se cumplió, se aplica la evolución
+            if (should_trigger) {
+                // --- CORRECCIÓN CLAVE AQUÍ ---
+                // Se actualizan AMBOS campos de la imagen para mantener la consistencia
+                nft.image_url = rule.new_image_url;
+                nft.image_blob_object_id = rule.new_image_blob_object_id; // <-- Se actualiza el ID del Blob
+                
+                nft.description = rule.new_description;
+                
+                // Se añaden los nuevos atributos
+                vector::append(&mut nft.attributes, rule.attributes_to_add);
+                // Se marca la regla como activada para que no vuelva a usarse
+                rule.is_triggered = true;
+            }
+        };
+        i = i + 1;
+    };
+
+    // Se emite un evento para notificar al mundo exterior del cambio
+    event::emit(NftEvolved {
+        nft_id: object::id(nft),
+        new_image_url: nft.image_url,
+        new_description: nft.description,
+    });
+}
 
 /// Permite a un admin marcar un perfil de proveedor como verificado.
     public entry fun verify_provider(
@@ -460,12 +483,13 @@ fun init(witness: EXPERIENCE_NFT, ctx: &mut TxContext) {
         });
     }
 
-public entry fun provider_mint_experience(
+   public entry fun provider_mint_experience(
     provider_profile: &ProviderProfile,
     name: StdString,
     description: StdString,
     image_url: StdString,
-    content_type: StdString, // <-- 1. NUEVO PARÁMETRO
+    image_blob_object_id: ID,
+    content_type: StdString,
     event_name: StdString,
     event_city: StdString,
     validity_details: StdString,
@@ -480,9 +504,11 @@ public entry fun provider_mint_experience(
     is_redeemable: bool,
     expiration_timestamp_ms: u64,
 
+    // Parámetros para las reglas de evolución
     rule_trigger_types: vector<u8>,
     rule_trigger_values: vector<u64>,
     rule_new_image_urls: vector<StdString>,
+    rule_new_image_blob_object_ids: vector<ID>, // <-- 1. NUEVO PARÁMETRO
     rule_new_descriptions: vector<StdString>,
     
     ctx: &mut TxContext
@@ -504,22 +530,26 @@ public entry fun provider_mint_experience(
         i = i + 1;
     };
 
-    // --- 2. CAMBIO CLAVE: AÑADIR EL ATRIBUTO `content-type` DINÁMICAMENTE ---
     vector::push_back(&mut attributes, Attribute {
         key: string::utf8(b"content-type"),
-        value: content_type // Usamos el valor pasado desde el frontend
+        value: content_type
     });
 
     // 3. Reconstruir el vector<EvolutionRule>
     let mut evolution_rules = vector::empty<EvolutionRule>();
     let mut j = 0;
     let rules_len = vector::length(&rule_trigger_types);
+    // Verificación de consistencia para los nuevos parámetros de las reglas
+    assert!(vector::length(&rule_new_image_blob_object_ids) == rules_len, E_INVALID_ARGUMENT);
 
     while (j < rules_len) {
         vector::push_back(&mut evolution_rules, EvolutionRule {
             trigger_type: *vector::borrow(&rule_trigger_types, j),
             trigger_value: *vector::borrow(&rule_trigger_values, j),
-            new_image_url: url::new_unsafe_from_bytes(*string::bytes(vector::borrow(&rule_new_image_urls, j))),
+            // 3. CORRECCIÓN DEL WARNING: Usar `as_bytes`
+            new_image_url: url::new_unsafe_from_bytes(*string::as_bytes(vector::borrow(&rule_new_image_urls, j))),
+            // 2. CORRECCIÓN DEL ERROR: Añadir el ID del blob
+            new_image_blob_object_id: *vector::borrow(&rule_new_image_blob_object_ids, j),
             new_description: *vector::borrow(&rule_new_descriptions, j),
             attributes_to_add: vector::empty(),
             is_triggered: false,
@@ -530,9 +560,11 @@ public entry fun provider_mint_experience(
     // 4. Crear el struct del NFT
     let nft = ExperienceNFT {
         id: object::new(ctx),
+        image_blob_object_id: image_blob_object_id,
         name: name,
         description: description,
-        image_url: url::new_unsafe_from_bytes(*string::bytes(&image_url)),
+        // 3. CORRECCIÓN DEL WARNING: Usar `as_bytes`
+        image_url: url::new_unsafe_from_bytes(*string::as_bytes(&image_url)),
         event_name: event_name,
         event_city: event_city,
         validity_details: validity_details,
@@ -880,7 +912,7 @@ public entry fun provider_mint_experience(
     
     // --- FUNCIONES DE RESEÑAS Y FRACCIONAMIENTO ---
 
-    public entry fun add_review(
+public entry fun add_review(
         provider_profile: &mut ProviderProfile,
         receipt: PurchaseReceipt,
         rating: u8,
@@ -925,101 +957,108 @@ public entry fun provider_mint_experience(
         object::delete(id);
     }
 
-    public entry fun fractionize(
-        nft: ExperienceNFT, 
-        shares: vector<u64>, 
-        recipients: vector<address>,
-        clock: &Clock, // <-- AÑADIDO
-        ctx: &mut TxContext
-    ) {
+    // En tu archivo experience_nft.move
 
-         // --- AÑADIDO: Verificación de Expiración ---
-        assert!(
-            nft.expiration_timestamp_ms == 0 || clock::timestamp_ms(clock) < nft.expiration_timestamp_ms,
-            E_UNAUTHORIZED // Puedes usar un código de error E_TICKET_EXPIRED
-        );
-        let owner = tx_context::sender(ctx);
-        let parent_id = object::id(&nft);
-        let parent_name = nft.name;
-        let parent_image_url = nft.image_url;
-        let mut total_transferred_shares = 0u64;
-        let mut i = 0;
-        let shares_len = vector::length(&shares);
-        
-        while (i < shares_len) {
-            total_transferred_shares = total_transferred_shares + *vector::borrow(&shares, i);
-            i = i + 1;
+public entry fun fractionize(
+    nft: ExperienceNFT, 
+    shares: vector<u64>, 
+    recipients: vector<address>,
+    clock: &Clock,
+    ctx: &mut TxContext
+) {
+    // Verificación de Expiración
+    assert!(
+        nft.expiration_timestamp_ms == 0 || clock::timestamp_ms(clock) < nft.expiration_timestamp_ms,
+        E_UNAUTHORIZED
+    );
+    
+    let owner = tx_context::sender(ctx);
+    let parent_id = object::id(&nft);
+    let parent_name = nft.name;
+    let parent_image_url = nft.image_url;
+    // --- 1. Guardamos también el ID del blob de la imagen ---
+    let parent_image_blob_object_id = nft.image_blob_object_id;
+    
+    let mut total_transferred_shares = 0u64;
+    let mut i = 0;
+    let shares_len = vector::length(&shares);
+    
+    while (i < shares_len) {
+        total_transferred_shares = total_transferred_shares + *vector::borrow(&shares, i);
+        i = i + 1;
+    };
+    
+    assert!(total_transferred_shares <= 10000, E_INVALID_SHARES); // Usar basis points (ej. 100.00%)
+    assert!(vector::length(&recipients) == shares_len, E_INVALID_SHARES);
+    
+    let owner_share = 10000 - total_transferred_shares;
+    if (owner_share > 0) {
+        let owner_fraction = Fraction {
+            id: object::new(ctx), 
+            parent_id, 
+            parent_image_blob_object_id: parent_image_blob_object_id, // <-- Se añade aquí
+            share: owner_share,
+            parent_name: parent_name, 
+            parent_image_url: parent_image_url,
         };
-        
-        assert!(total_transferred_shares <= 100, E_INVALID_SHARES);
-        assert!(vector::length(&recipients) == shares_len, E_INVALID_SHARES);
-        
-        let owner_share = 100 - total_transferred_shares;
-        if (owner_share > 0) {
-            let owner_fraction = Fraction {
+        transfer::public_transfer(owner_fraction, owner);
+    };
+    
+    let mut j = 0;
+    while (j < shares_len) {
+        let share = *vector::borrow(&shares, j);
+        let recipient = *vector::borrow(&recipients, j);
+        if (share > 0) {
+            let fraction = Fraction {
                 id: object::new(ctx), 
                 parent_id, 
-                share: owner_share,
+                parent_image_blob_object_id: parent_image_blob_object_id, // <-- Y aquí
+                share,
                 parent_name: parent_name, 
                 parent_image_url: parent_image_url,
             };
-            transfer::public_transfer(owner_fraction, owner);
+            transfer::public_transfer(fraction, recipient);
         };
-        
-        let mut j = 0;
-        while (j < shares_len) {
-            let share = *vector::borrow(&shares, j);
-            let recipient = *vector::borrow(&recipients, j);
-            if (share > 0) {
-                let fraction = Fraction {
-                    id: object::new(ctx), 
-                    parent_id, 
-                    share,
-                    parent_name: parent_name, 
-                    parent_image_url: parent_image_url,
-                };
-                transfer::public_transfer(fraction, recipient);
-            };
-            j = j + 1;
-        };
-        
-        event::emit(NftFractioned { 
-            parent_id, 
-            shares_created: shares_len
-        });
+        j = j + 1;
+    };
+    
+    event::emit(NftFractioned { 
+        parent_id, 
+        shares_created: shares_len
+    });
 
-        // Se quema el NFT original después de fraccionarlo
-        let ExperienceNFT { 
-    id, 
-    name:_, 
-    description:_, 
-    image_url:_, 
-    event_name:_, 
-    event_city:_, 
-    validity_details:_, 
-    experience_type:_, 
-    issuer_name:_, 
-    tier:_, 
-    serial_number:_, 
-    attributes:_, 
-    collection_name:_, 
-    royalties:_, 
-    provider_id: _, 
-    provider_address: _,
-    // --- LÍNEAS AÑADIDAS ---
-    is_redeemable: _,
-    expiration_timestamp_ms: _,
-    evolution_rules: _
-} = nft;
-        object::delete(id);
-    }
+    // Se quema el NFT original después de fraccionarlo
+    let ExperienceNFT { 
+        id, 
+        image_blob_object_id: _, // <-- 2. Se añade el campo que faltaba para evitar el error
+        name:_, 
+        description:_, 
+        image_url:_, 
+        event_name:_, 
+        event_city:_, 
+        validity_details:_, 
+        experience_type:_, 
+        issuer_name:_, 
+        tier:_, 
+        serial_number:_, 
+        attributes:_, 
+        collection_name:_, 
+        royalties:_, 
+        provider_id: _, 
+        provider_address: _,
+        is_redeemable: _,
+        expiration_timestamp_ms: _,
+        evolution_rules: _
+    } = nft;
+    object::delete(id);
+}
 
     // --- FUNCIONES INTERNAS (Helpers) ---
     
     
     
 
-    fun transfer_nft_and_create_receipt(listing: Listing, buyer: address, ctx: &mut TxContext) {
+fun transfer_nft_and_create_receipt(listing: Listing, buyer: address, ctx: &mut TxContext) {
         let listing_id = object::id(&listing);
         let provider_id = listing.provider_id;
         let nft_name_copy = listing.nft.name;
